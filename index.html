@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Link English v3.9.1</title>
+    
+    <meta name="theme-color" content="#3b82f6">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="icon" type="image/png" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🦉</text></svg>">
+    <link rel="manifest" id="my-manifest">
+
+    <style>
+        /* --- Base Styles --- */
+        :root {
+            --primary: #3b82f6; --bg: #f8fafc; --card: #ffffff; --text: #1e293b; --subtext: #64748b;
+            --border: #e2e8f0; --accent: #f59e0b; --danger: #ef4444; --success: #10b981;
+            --cat-bus: #dbeafe; --cat-bus-t: #1e40af; --cat-day: #dcfce7; --cat-day-t: #166534;
+            --cat-trv: #fce7f3; --cat-trv-t: #9d174d; --cat-toe: #ffedd5; --cat-toe-t: #9a3412;
+            --status-done: #dcfce7; --status-done-t: #166534;
+            --tab-active-bg: #eff6ff; --tab-active-t: #3b82f6;
+        }
+        [data-theme="dark"] {
+            --primary: #60a5fa; --bg: #0f172a; --card: #1e293b; --text: #f1f5f9; --subtext: #94a3b8;
+            --border: #334155; --cat-bus: #1e3a8a; --cat-bus-t: #dbeafe; --cat-day: #14532d; --cat-day-t: #dcfce7;
+            --cat-trv: #831843; --cat-trv-t: #fce7f3; --cat-toe: #7c2d12; --cat-toe-t: #ffedd5;
+            --status-done: #064e3b; --status-done-t: #6ee7b7;
+            --tab-active-bg: #1e293b; --tab-active-t: #60a5fa;
+        }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background-color: var(--bg); color: var(--text); margin: 0; display: flex; flex-direction: column; height: 100vh; overscroll-behavior: none; }
+        
+        /* HEADER & NAV */
+        header { background-color: var(--card); border-bottom: 1px solid var(--border); padding: 0.8rem; display: flex; justify-content: space-between; align-items: center; padding-top: env(safe-area-inset-top); z-index: 10;}
+        .app-title { font-weight: bold; font-size: 1.1rem; }
+        .theme-toggle { background: none; border: none; font-size: 1.2rem; cursor: pointer; }
+        
+        /* MAIN NAV (Bottom) */
+        .bottom-nav { display: flex; background: var(--card); border-top: 1px solid var(--border); padding-bottom: env(safe-area-inset-bottom); box-shadow: 0 -2px 10px rgba(0,0,0,0.05); }
+        .nav-item { flex: 1; padding: 12px; text-align: center; font-size: 0.8rem; color: var(--subtext); cursor: pointer; border-top: 3px solid transparent; }
+        .nav-item.active { color: var(--primary); border-top-color: var(--primary); font-weight: bold; }
+        .nav-icon { display: block; font-size: 1.4rem; margin-bottom: 2px; }
+
+        main { flex: 1; overflow-y: auto; padding: 1rem; max-width: 600px; margin: 0 auto; width: 100%; box-sizing: border-box; }
+
+        /* COMPONENTS */
+        .card { background: var(--card); border-radius: 12px; padding: 1.2rem; margin-bottom: 1rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); border: 1px solid var(--border); }
+        .btn { background-color: var(--primary); color: white; border: none; padding: 12px 16px; border-radius: 8px; font-size: 0.95rem; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 5px; width: 100%; box-sizing: border-box; font-weight: 600; }
+        .btn:active { opacity: 0.9; transform: scale(0.98); }
+        .btn-outline { background: transparent; border: 1px solid var(--primary); color: var(--primary); }
+        .btn-danger-outline { background: transparent; border: 1px solid var(--danger); color: var(--danger); }
+        .btn-success { background-color: var(--success); color: white; }
+        .btn-accent { background-color: var(--accent); color: #fff; }
+
+        /* LIST VIEW */
+        .list-item { display: flex; align-items: center; padding: 15px; border-bottom: 1px solid var(--border); cursor: pointer; background: var(--card); margin-bottom: 8px; border-radius: 8px; border: 1px solid var(--border); }
+        .list-content { flex: 1; }
+        .list-summary { font-weight: bold; font-size: 1rem; margin-bottom: 5px; }
+        .list-meta { display: flex; gap: 8px; align-items: center; font-size: 0.8rem; flex-wrap: wrap; }
+        .cat-tag { padding: 2px 8px; border-radius: 10px; font-weight: 600; font-size: 0.75rem; }
+        .level-tag { font-size: 0.7rem; padding: 1px 6px; border: 1px solid var(--border); border-radius: 4px; color: var(--subtext); }
+        .cat-Business { background: var(--cat-bus); color: var(--cat-bus-t); } .cat-Daily { background: var(--cat-day); color: var(--cat-day-t); }
+        .cat-Travel { background: var(--cat-trv); color: var(--cat-trv-t); } .cat-TOEIC { background: var(--cat-toe); color: var(--cat-toe-t); }
+        .progress-badges { display: flex; gap: 5px; margin-left: auto; }
+        .p-badge { font-size: 0.8rem; padding: 3px 6px; border-radius: 4px; background: var(--border); color: var(--subtext); opacity: 0.5; filter: grayscale(100%); transition: 0.3s; }
+        .p-badge.done { background: var(--status-done); color: var(--status-done-t); opacity: 1; filter: grayscale(0%); font-weight: bold; border: 1px solid var(--status-done-t); }
+
+        /* LESSON VIEW (Unified) */
+        .lesson-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
+        .lesson-tabs { display: flex; background: var(--bg); padding: 4px; border-radius: 10px; border: 1px solid var(--border); margin-bottom: 15px; }
+        .l-tab { flex: 1; text-align: center; padding: 8px; border-radius: 8px; cursor: pointer; font-weight: 600; color: var(--subtext); transition: 0.2s; font-size: 0.95rem; }
+        .l-tab.active { background: var(--card); color: var(--primary); box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        
+        .lesson-content { display: none; animation: fadeIn 0.3s ease; }
+        .lesson-content.active { display: block; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* Commute specific */
+        .text-en { font-size: 1.2rem; line-height: 1.6; margin: 15px 0; white-space: pre-wrap; }
+        .text-jp { color: var(--subtext); font-size: 0.95rem; margin-top: 10px; border-top: 1px dashed var(--border); padding-top: 10px; }
+        .chunk-view { line-height: 2; font-size: 1.1rem; } .chunk-sep { color: var(--subtext); opacity: 0.3; margin: 0 4px; }
+        
+        /* Practice specific */
+        .pattern-box { text-align: center; padding: 15px; background: var(--bg); border-radius: 8px; margin-bottom: 15px; border: 1px solid var(--border); }
+        .pattern-key { font-size: 1.4rem; font-weight: bold; color: var(--primary); margin-bottom: 5px; }
+        .drill-card { border-top: 1px solid var(--border); padding-top: 15px; margin-top: 15px; }
+        .btn-mic { background: var(--bg); border: 1px solid var(--subtext); color: var(--text); }
+        .btn-mic.listening { background: var(--danger); color: white; border-color: var(--danger); animation: pulse 1.5s infinite; }
+        .score-box { margin-top: 10px; padding: 10px; background: var(--bg); border-radius: 6px; font-size: 0.9rem; }
+
+        /* Controls */
+        .slider-container { display: flex; align-items: center; padding: 5px; background: var(--bg); border-radius: 8px; margin-bottom: 10px; }
+        input[type=range] { flex: 1; margin: 0 10px; }
+
+        /* Config Forms */
+        .form-row { display: flex; gap: 10px; margin-bottom: 10px; }
+        .form-col { flex: 1; }
+        label { font-size: 0.75rem; color: var(--subtext); font-weight: bold; display: block; margin-bottom: 3px; }
+        textarea, input[type=text], input[type=number], select { width: 100%; padding: 8px; border-radius: 6px; background: var(--bg); color: var(--text); border: 1px solid var(--border); box-sizing: border-box; }
+        textarea { height: 80px; resize: vertical; }
+
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="app-title">Link English v3.9.1</div>
+    <button class="theme-toggle" onclick="toggleTheme()">🌙</button>
+</header>
+
+<main id="app-content"></main>
+
+<div class="bottom-nav">
+    <div class="nav-item active" id="nav-list" onclick="setMode('list')">
+        <span class="nav-icon">📂</span>List
+    </div>
+    <div class="nav-item" id="nav-config" onclick="setMode('settings')">
+        <span class="nav-icon">⚙️</span>Config
+    </div>
+</div>
+
+<script>
+const manifest = { "name": "Link English", "short_name": "LinkEng", "start_url": ".", "display": "standalone", "background_color": "#f8fafc", "theme_color": "#3b82f6", "icons": [{ "src": "data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🦉</text></svg>", "sizes": "512x512", "type": "image/svg+xml" }] };
+document.getElementById('my-manifest').setAttribute('href', 'data:application/manifest+json;charset=utf-8,' + encodeURIComponent(JSON.stringify(manifest)));
+
+// --- DATA STRUCTURE (v3.9.1: Added Level) ---
+const defaultData = [
+  { 
+      "id": "b1", "category": "Business", "level": "Intermediate",
+      "progress": { "listen": false, "speak": false },
+      "commute_content": { 
+          "english_text": "I'm afraid we have to reschedule the meeting. Since the client is stuck in heavy traffic, he won't be able to make it by 3 PM.", 
+          "japanese_translation": "申し訳ありませんが、会議を変更しなければなりません。クライアントが渋滞のため、午後3時に間に合いません。", 
+          "chunks": "I'm afraid / we have to reschedule / the meeting. / Since the client is / stuck in heavy traffic, / he won't be able / to make it / by 3 PM.", 
+          "summary": "会議のリスケ", 
+          "vocabulary": [{ "word": "reschedule", "meaning": "予定変更する" }, { "word": "make it", "meaning": "間に合う" }] 
+      }, 
+      "home_content": { 
+          "pattern_focus": "won't be able to...", "pattern_explanation": "「〜できそうにない」と未来の不可能性を伝える。", 
+          "drills": [{ "japanese": "3時には間に合いそうにありません。", "english": "He won't be able to make it by 3 PM." }, { "japanese": "期限までに終えるのは無理そうです。", "english": "I won't be able to finish by the deadline." }] 
+      } 
+  },
+  { 
+      "id": "d1", "category": "Daily", "level": "Beginner",
+      "progress": { "listen": false, "speak": false },
+      "commute_content": { 
+          "english_text": "I'm going to try a new pasta recipe tonight. It requires fresh basil and plenty of garlic, so I need to stop by the supermarket.", 
+          "japanese_translation": "今夜は新しいパスタのレシピを試すつもり。新鮮なバジルとたっぷりのニンニクがいるから、スーパーに寄らなきゃ。", 
+          "chunks": "I'm going to try / a new pasta recipe tonight. / It requires fresh basil / and plenty of garlic, / so I need to stop by / the supermarket.", 
+          "summary": "夕食の買い物", 
+          "vocabulary": [{ "word": "require", "meaning": "必要とする" }, { "word": "plenty of", "meaning": "たっぷりの" }, { "word": "stop by", "meaning": "立ち寄る" }] 
+      }, 
+      "home_content": { 
+          "pattern_focus": "It requires...", "pattern_explanation": "「それには〜が必要だ」と条件や材料を述べる。", 
+          "drills": [{ "japanese": "この仕事には忍耐が必要です。", "english": "This job requires patience." }, { "japanese": "入場にはチケットが必要です。", "english": "Admission requires a ticket." }] 
+      } 
+  },
+  { 
+      "id": "t1", "category": "Travel", "level": "Advanced",
+      "progress": { "listen": false, "speak": false },
+      "commute_content": { 
+          "english_text": "Could you please keep my luggage until check-in time? I'd like to explore the city without carrying these heavy bags.", 
+          "japanese_translation": "チェックインの時間まで荷物を預かってもらえますか？ 重いバッグを持たずに街を散策したいんです。", 
+          "chunks": "Could you please / keep my luggage / until check-in time? / I'd like to explore the city / without carrying / these heavy bags.", 
+          "summary": "ホテル荷物預け", 
+          "vocabulary": [{ "word": "luggage", "meaning": "手荷物" }, { "word": "explore", "meaning": "散策する" }] 
+      }, 
+      "home_content": { 
+          "pattern_focus": "Could you please...", "pattern_explanation": "「〜していただけませんか？」と丁寧に依頼する。", 
+          "drills": [{ "japanese": "写真を撮っていただけませんか？", "english": "Could you please take a photo?" }, { "japanese": "タクシーを呼んでいただけますか？", "english": "Could you please call a taxi?" }] 
+      } 
+  }
+];
+
+let state = { 
+    data: [], currentIndex: 0, mode: 'list', lessonTab: 'commute',
+    theme: 'light', showText: false, selectedVoiceIndex: -1, voiceRate: 1.0, 
+    isLooping: false, promptTopic: "General", promptMode: "standard", promptLevel: "Intermediate", promptQty: 3 
+};
+let voices = [], loopInterval = null, recognition = null;
+
+function init() {
+    const savedData = localStorage.getItem('le_data');
+    if (savedData) {
+        state.data = JSON.parse(savedData);
+        state.data.forEach(d => { if(!d.progress) d.progress = {listen:false, speak:false}; });
+    } else {
+        state.data = defaultData;
+    }
+    
+    const restore = (k, t) => { const v = localStorage.getItem(k); if(v) state[t] = t==='s' ? v : parseFloat(v); };
+    restore('le_theme', 'theme'); restore('le_voice_index', 'selectedVoiceIndex'); restore('le_voice_rate', 'voiceRate');
+    
+    if (state.theme === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+    
+    if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        recognition = new SpeechRecognition(); recognition.lang = 'en-US'; recognition.continuous = false; recognition.interimResults = false;
+    }
+    window.speechSynthesis.onvoiceschanged = loadVoices; loadVoices(); 
+    render();
+}
+
+function loadVoices() {
+    voices = window.speechSynthesis.getVoices(); 
+    if (!voices.length) return;
+    if (state.selectedVoiceIndex === -1) { 
+        let idx = voices.findIndex(v => v.name.includes("Google US English")); 
+        if (idx === -1) idx = voices.findIndex(v => v.lang === "en-US"); 
+        if (idx !== -1) { state.selectedVoiceIndex = idx; localStorage.setItem('le_voice_index', idx); } 
+    }
+}
+
+function setMode(m) { 
+    state.mode = m; 
+    stopAudio(); 
+    document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+    if(m === 'list') document.getElementById('nav-list').classList.add('active');
+    if(m === 'settings') document.getElementById('nav-config').classList.add('active');
+    render(); 
+}
+
+function openLesson(index) {
+    state.currentIndex = index;
+    state.mode = 'lesson';
+    state.lessonTab = 'commute';
+    state.showText = false;
+    stopAudio();
+    render();
+}
+
+function setLessonTab(tab) {
+    state.lessonTab = tab;
+    stopAudio();
+    render();
+}
+
+function toggleTheme() { 
+    state.theme = state.theme === 'light' ? 'dark' : 'light'; 
+    document.documentElement.setAttribute('data-theme', state.theme); 
+    localStorage.setItem('le_theme', state.theme); 
+    render(); 
+}
+
+function toggleProgress(type) {
+    const item = state.data[state.currentIndex];
+    item.progress[type] = !item.progress[type];
+    saveData();
+    render();
+}
+function saveData() { localStorage.setItem('le_data', JSON.stringify(state.data)); }
+
+function speak(txt) { 
+    window.speechSynthesis.cancel(); 
+    const u = new SpeechSynthesisUtterance(txt); 
+    u.lang = 'en-US'; 
+    if (voices[state.selectedVoiceIndex]) u.voice = voices[state.selectedVoiceIndex]; 
+    u.rate = state.voiceRate; 
+    window.speechSynthesis.speak(u); 
+}
+function stopAudio() { 
+    state.isLooping = false; 
+    clearInterval(loopInterval); 
+    window.speechSynthesis.cancel(); 
+    render(); 
+}
+function toggleLoop() { 
+    if (state.isLooping) {
+        stopAudio(); 
+    } else { 
+        state.isLooping = true; 
+        render(); 
+        const t = state.data[state.currentIndex].commute_content.english_text; 
+        speak(t); 
+        loopInterval = setInterval(() => { if (!window.speechSynthesis.speaking) speak(t); }, 3000); 
+    } 
+}
+
+function startDictation(target, resId, btnId) {
+    if (!recognition) { alert("Mic not supported."); return; }
+    const btn = document.getElementById(btnId); const res = document.getElementById(resId);
+    btn.classList.add('listening'); res.innerHTML = "Listening..."; res.classList.remove('hidden');
+    recognition.start();
+    recognition.onresult = (e) => {
+        const transcript = e.results[0][0].transcript;
+        const feedback = analyzeSpeech(target, transcript);
+        res.innerHTML = feedback.html;
+        btn.classList.remove('listening');
+        if(feedback.score === 100) {
+            const item = state.data[state.currentIndex];
+            if(!item.progress.speak) {
+                item.progress.speak = true;
+                saveData();
+                render(); 
+                alert("🎉 Perfect! 'Speak' marked as done.");
+            }
+        }
+    };
+    recognition.onend = () => btn.classList.remove('listening');
+}
+
+function analyzeSpeech(target, input) {
+    const clean = (s) => s.toLowerCase().replace(/[.,?!]/g, "").split(/\s+/);
+    const tWords = clean(target); const iWords = clean(input);
+    let html = ""; let matchedCount = 0;
+    tWords.forEach(word => {
+        if (iWords.includes(word)) { html += `<span class="word-ok">${word}</span> `; matchedCount++; iWords.splice(iWords.indexOf(word), 1); } 
+        else { html += `<span class="word-miss">${word}</span> `; }
+    });
+    const score = Math.round((matchedCount / tWords.length) * 100);
+    const color = score === 100 ? "#10b981" : (score > 60 ? "#f59e0b" : "#ef4444");
+    return {
+        score: score,
+        html: `<div class="score-display" style="color:${color};font-weight:bold;font-size:1.1rem">Score: ${score}%</div><div>${html}</div><div style="font-size:0.8rem;color:gray;margin-top:5px">You said: "${input}"</div>`
+    };
+}
+
+function render() {
+    const app = document.getElementById('app-content');
+    document.querySelector('.bottom-nav').style.display = (state.mode === 'lesson') ? 'none' : 'flex';
+
+    if (state.mode === 'list') renderList(app);
+    else if (state.mode === 'settings') renderSettings(app);
+    else if (state.mode === 'lesson') renderLesson(app);
+}
+
+function renderList(c) {
+    if (state.data.length === 0) { c.innerHTML = '<div style="text-align:center;padding:20px;color:var(--subtext)">No Data.<br>Go to Config to reset or add.</div>'; return; }
+    
+    let html = `<div style="padding-bottom:20px;">`;
+    state.data.forEach((d, i) => {
+        const listenClass = d.progress.listen ? 'done' : '';
+        const speakClass = d.progress.speak ? 'done' : '';
+        const level = d.level || 'General';
+        
+        html += `
+        <div class="list-item" onclick="openLesson(${i})">
+            <div class="list-content">
+                <div class="list-summary">${d.commute_content.summary}</div>
+                <div class="list-meta">
+                    <span class="cat-tag cat-${d.category}">${d.category}</span>
+                    <span class="level-tag">${level}</span>
+                    <div class="progress-badges">
+                        <span class="p-badge ${listenClass}">🎧 Listen</span>
+                        <span class="p-badge ${speakClass}">🗣️ Speak</span>
+                    </div>
+                </div>
+            </div>
+            <div style="color:var(--subtext)">›</div>
+        </div>`;
+    });
+    html += `</div>`;
+    c.innerHTML = html;
+}
+
+function renderLesson(c) {
+    const d = state.data[state.currentIndex];
+    const isListen = state.lessonTab === 'commute';
+    
+    let html = `
+    <div class="lesson-header">
+        <button class="btn-outline" onclick="setMode('list')" style="width:auto;padding:5px 10px;font-size:0.8rem">← Back</button>
+        <div style="font-weight:bold">${d.commute_content.summary}</div>
+        <div style="width:50px"></div>
+    </div>
+
+    <div class="lesson-tabs">
+        <div class="l-tab ${isListen?'active':''}" onclick="setLessonTab('commute')">🎧 Commute</div>
+        <div class="l-tab ${!isListen?'active':''}" onclick="setLessonTab('practice')">🗣️ Practice</div>
+    </div>
+    `;
+
+    html += `<div class="card">`;
+    
+    if (isListen) {
+        html += `
+            <div class="lesson-content active">
+                <div style="margin-bottom:15px">
+                    <button class="btn ${d.progress.listen ? 'btn-success' : 'btn-outline'}" onclick="toggleProgress('listen')">
+                        ${d.progress.listen ? '✅ Completed (Listen)' : '⬜ Mark as Listened'}
+                    </button>
+                </div>
+
+                <div style="display:flex;gap:10px;margin-bottom:10px">
+                    <button class="btn" onclick="speak('${d.commute_content.english_text.replace(/'/g,"\\'")}')">▶️ Play</button>
+                    <button class="btn ${state.isLooping?'btn-accent':'btn-outline'}" onclick="toggleLoop()">${state.isLooping?'🔁 Loop On':'🔁 Loop'}</button>
+                </div>
+                
+                <div class="slider-container">
+                    <span style="font-size:0.8rem;width:40px">Speed</span>
+                    <input type="range" min="0.5" max="1.5" step="0.1" value="${state.voiceRate}" oninput="state.voiceRate=this.value; localStorage.setItem('le_voice_rate', this.value); this.nextElementSibling.innerText=this.value+'x'">
+                    <span style="font-size:0.8rem;width:30px">${state.voiceRate}x</span>
+                </div>
+
+                <div id="txt-area" class="${state.showText?'':'hidden'}">
+                    <div class="text-en">${d.commute_content.english_text}</div>
+                    <div class="text-jp">${d.commute_content.japanese_translation}</div>
+                    <hr style="border:0;border-top:1px dashed var(--border);margin:15px 0">
+                    <div class="chunk-view">${d.commute_content.chunks.split('/').map(c=>`<span>${c}</span><span class="chunk-sep">/</span>`).join('')}</div>
+                </div>
+                
+                <button class="btn-outline" style="margin-top:15px;width:100%" onclick="state.showText=!state.showText;render()">
+                    ${state.showText ? '🙈 Hide Text' : '👁️ Show Text'}
+                </button>
+            </div>
+        `;
+    } else {
+        html += `
+            <div class="lesson-content active">
+                <div style="margin-bottom:15px">
+                    <button class="btn ${d.progress.speak ? 'btn-success' : 'btn-outline'}" onclick="toggleProgress('speak')">
+                        ${d.progress.speak ? '✅ Completed (Speak)' : '⬜ Mark as Practiced'}
+                    </button>
+                </div>
+
+                <div class="pattern-box">
+                    <div style="font-size:0.8rem;color:var(--subtext)">KEY PATTERN</div>
+                    <div class="pattern-key">${d.home_content.pattern_focus}</div>
+                    <div style="font-size:0.9rem">${d.home_content.pattern_explanation}</div>
+                </div>
+        `;
+        
+        d.home_content.drills.forEach((q, i) => {
+            const safeEng = q.english.replace(/'/g, "\\'");
+            html += `
+                <div class="drill-card">
+                    <div style="font-weight:bold;margin-bottom:8px">${i+1}. ${q.japanese}</div>
+                    <div style="display:flex;gap:10px">
+                        <button class="btn btn-mic" id="btn-mic-${i}" onclick="startDictation('${safeEng}', 'res-${i}', 'btn-mic-${i}')" style="flex:1">🎙️ Speak</button>
+                        <button class="btn btn-accent" onclick="document.getElementById('ans-${i}').classList.remove('hidden')" style="width:60px">👀</button>
+                    </div>
+                    <div id="res-${i}" class="hidden score-box"></div>
+                    <div id="ans-${i}" class="hidden" style="margin-top:5px;color:var(--primary);font-weight:bold">${q.english}</div>
+                </div>
+            `;
+        });
+        html += `</div>`;
+    }
+
+    html += `</div>`; 
+    
+    html += `
+    <div style="display:flex;justify-content:space-between;margin-top:20px">
+        <button class="btn-outline" style="width:45%" onclick="if(state.currentIndex>0) openLesson(state.currentIndex-1)" ${state.currentIndex===0?'disabled':''}>← Prev Lesson</button>
+        <button class="btn-outline" style="width:45%" onclick="if(state.currentIndex<state.data.length-1) openLesson(state.currentIndex+1)" ${state.currentIndex===state.data.length-1?'disabled':''}>Next Lesson →</button>
+    </div>
+    `;
+
+    c.innerHTML = html;
+}
+
+function updatePrompt() {
+    state.promptTopic = document.getElementById('p-topic').value || "General";
+    state.promptMode = document.getElementById('p-mode').value;
+    state.promptLevel = document.getElementById('p-level').value;
+    state.promptQty = document.getElementById('p-qty').value;
+    
+    const customText = document.getElementById('p-custom-text').value.trim();
+    let baseInstruction = "";
+    
+    if (customText) {
+        baseInstruction = `## タスク: テキスト解析モード\n以下の英文を学習データ化してください。\n\n対象英文:\n"${customText}"\n\n【重要】この英文を一字一句変更せず、そのまま \`english_text\` に格納し、それを完璧に \`chunks\` に分割してください。単語の省略、要約は厳禁です。`;
+    } else {
+        let modeDetail = "";
+        if (state.promptMode === "business") modeDetail = "- 場面：オフィス、会議、交渉。丁寧なビジネス英語。";
+        else if (state.promptMode === "travel") modeDetail = "- 場面：旅行トラブル、注文。短く実用的なフレーズ。";
+        else if (state.promptMode === "grammar") modeDetail = "- 特定の文法（完了形、仮定法など）を強調した例文。";
+        
+        baseInstruction = `## タスク: 生成モード\nテーマ: ${state.promptTopic}\nレベル: ${state.promptLevel}\n作成数: ${state.promptQty}つ\n${modeDetail}\n- 上記設定に基づき、自然な英文を作成してください。`;
+    }
+
+    const p = `あなたは英語教材作成のプロです。以下の仕様で学習データを作成してください。
+
+${baseInstruction}
+
+## 【絶対遵守ルール (CRITICAL)】
+1. **原文維持**: \`english_text\` の単語、記号を勝手に削除・変更してはいけません。
+2. **完全復元性**: \`chunks\` を連結すると、\`english_text\` と一字一句完全に一致しなければなりません。
+3. **出力形式**: **指定された数量(${state.promptQty}つ)のデータ**を含む、以下のJSON配列のみを出力してください。
+
+\`\`\`json
+[
+  {
+    "id": "gen_${Math.floor(Math.random()*1000)}", 
+    "category": "${state.promptTopic}",
+    "level": "${state.promptLevel}",
+    "progress": { "listen": false, "speak": false },
+    "commute_content": { ... },
+    "home_content": { ... }
+  },
+  // ... (指定された数だけ繰り返す) ...
+]
+\`\`\`
+`;
+    document.getElementById('p-area').value = p;
+}
+
+function copyPrompt() { updatePrompt(); navigator.clipboard.writeText(document.getElementById('p-area').value).then(() => alert('Prompt Copied!')); }
+function downloadData() { const blob = new Blob([JSON.stringify(state.data, null, 2)], { type: "application/json" }); const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `link_english_backup.json`; a.click(); }
+function copyData() { navigator.clipboard.writeText(JSON.stringify(state.data, null, 2)).then(() => alert('Copied!')); }
+function loadJsonData() { 
+    try { 
+        const d = JSON.parse(document.getElementById('data-input').value); 
+        if (Array.isArray(d)) { 
+            d.forEach(x => { if(!x.progress) x.progress = {listen:false, speak:false}; });
+            if (confirm('Add to existing? (Cancel to Replace)')) state.data = [...state.data, ...d]; else state.data = d; 
+            saveData(); alert('Loaded!'); setMode('list'); 
+        } else alert('Invalid JSON'); 
+    } catch(e) { alert('Error: '+e.message); } 
+}
+function resetData() { if(confirm('Reset all data to Starter Pack?')) { localStorage.removeItem('le_data'); location.reload(); } }
+
+function renderSettings(c) {
+    const opts = voices.map((v,i)=>`<option value="${i}" ${i==state.selectedVoiceIndex?'selected':''}>${v.name}</option>`).join('');
+    c.innerHTML = `
+    <div class="card">
+        <h2>🤖 AI Prompt Builder v3.9.1</h2>
+        <div style="margin-bottom:15px; border-bottom:1px dashed var(--border); padding-bottom:15px;">
+            <label style="color:var(--primary); font-size:0.9rem;">Option A: Custom Text (Paste here)</label>
+            <textarea id="p-custom-text" placeholder="Paste English text here..." style="height:60px;" oninput="updatePrompt()"></textarea>
+        </div>
+        <div style="margin-bottom:10px">
+            <label>Option B: Generate by Topic</label>
+            <input type="text" id="p-topic" value="${state.promptTopic}" oninput="updatePrompt()">
+        </div>
+        <div class="form-row">
+            <div class="form-col"><label>Mode</label><select id="p-mode" onchange="updatePrompt()"><option value="standard">Standard</option><option value="business">Business</option><option value="grammar">Grammar</option><option value="travel">Travel</option></select></div>
+            <div class="form-col"><label>Level</label><select id="p-level" onchange="updatePrompt()"><option value="Intermediate">Intermediate</option><option value="Advanced">Advanced</option><option value="Beginner">Beginner</option></select></div>
+            <div class="form-col" style="flex:0 0 60px"><label>Qty</label><input type="number" id="p-qty" value="${state.promptQty}" min="1" max="10" oninput="updatePrompt()"></div>
+        </div>
+        <textarea id="p-area" style="font-size:0.7rem;color:var(--subtext);margin-bottom:10px" readonly></textarea>
+        <button class="btn btn-outline" onclick="copyPrompt()">📋 Copy Prompt</button>
+    </div>
+    <div class="card">
+        <h2>Data & Voice</h2>
+        <div style="display:flex;gap:10px;margin-bottom:10px"><button class="btn" onclick="downloadData()">💾 Download</button><button class="btn btn-outline" onclick="copyData()">📋 Copy</button></div>
+        <textarea id="data-input" placeholder='Paste JSON here...' style="height:60px;"></textarea>
+        <button class="btn" onclick="loadJsonData()" style="margin-top:10px">Load Data</button>
+        <div style="margin-top:20px"><label>Voice</label><select onchange="state.selectedVoiceIndex=this.value;localStorage.setItem('le_voice_index',this.value)">${opts}</select></div>
+    </div>
+    <div class="card"><button class="btn btn-outline" onclick="resetData()">⚠️ Reset to Starter Pack</button></div>`;
+    setTimeout(updatePrompt, 0); 
+}
+
+init();
+</script>
+</body>
+</html>
