@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Link English v3.9.4</title>
+    <title>Link English v3.9.5</title>
     
     <meta name="theme-color" content="#3b82f6">
     <meta name="mobile-web-app-capable" content="yes">
@@ -35,7 +35,7 @@
         .theme-toggle { background: none; border: none; font-size: 1.2rem; cursor: pointer; }
         
         .bottom-nav { display: flex; background: var(--card); border-top: 1px solid var(--border); padding-bottom: env(safe-area-inset-bottom); box-shadow: 0 -2px 10px rgba(0,0,0,0.05); }
-        .nav-item { flex: 1; padding: 12px; text-align: center; font-size: 0.8rem; color: var(--subtext); cursor: pointer; border-top: 3px solid transparent; }
+        .nav-item { flex: 1; padding: 12px; text-align: center; font-size: 0.7rem; color: var(--subtext); cursor: pointer; border-top: 3px solid transparent; }
         .nav-item.active { color: var(--primary); border-top-color: var(--primary); font-weight: bold; }
         .nav-icon { display: block; font-size: 1.4rem; margin-bottom: 2px; }
 
@@ -94,7 +94,7 @@
 <body>
 
 <header>
-    <div class="app-title">Link English v3.9.4</div>
+    <div class="app-title">Link English v3.9.5</div>
     <button class="theme-toggle" onclick="toggleTheme()">🌙</button>
 </header>
 
@@ -104,22 +104,28 @@
     <div class="nav-item active" id="nav-list" onclick="setMode('list')">
         <span class="nav-icon">📂</span>List
     </div>
+    <div class="nav-item" id="nav-test" onclick="startTest()">
+        <span class="nav-icon">🎯</span>Test
+    </div>
     <div class="nav-item" id="nav-config" onclick="setMode('settings')">
         <span class="nav-icon">⚙️</span>Config
     </div>
 </div>
 
 <script>
+// --- CORE DATA ---
 const manifest = { "name": "Link English", "short_name": "LinkEng", "start_url": ".", "display": "standalone", "background_color": "#f8fafc", "theme_color": "#3b82f6", "icons": [{ "src": "data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🦉</text></svg>", "sizes": "512x512", "type": "image/svg+xml" }] };
 document.getElementById('my-manifest').setAttribute('href', 'data:application/manifest+json;charset=utf-8,' + encodeURIComponent(JSON.stringify(manifest)));
 
 let state = { 
     data: [], currentIndex: 0, mode: 'list', lessonTab: 'commute',
     theme: 'light', showText: false, selectedVoiceIndex: -1, voiceRate: 1.0, 
-    isLooping: false, promptTopic: "Business", promptLevel: "Intermediate", promptQty: 3 
+    isLooping: false, promptTopic: "Business", promptLevel: "Intermediate", promptQty: 3,
+    testQueue: [], testIndex: 0 // テスト用変数
 };
 let voices = [], loopInterval = null, recognition = null;
 
+// --- INITIALIZATION ---
 function init() {
     const savedData = localStorage.getItem('le_data');
     state.data = savedData ? JSON.parse(savedData) : [];
@@ -145,31 +151,21 @@ function loadVoices() {
     }
 }
 
+// --- NAVIGATION ---
 function setMode(m) { state.mode = m; stopAudio(); render(); }
-
-function openLesson(i) { 
-    state.currentIndex = i; 
-    state.mode = 'lesson'; 
-    state.lessonTab = 'commute'; 
-    state.showText = false; // 次の例題に移った時は必ずテキストを隠す
-    stopAudio(); 
-    render(); 
-}
-
+function openLesson(i) { state.currentIndex = i; state.mode = 'lesson'; state.lessonTab = 'commute'; state.showText = false; stopAudio(); render(); }
 function setLessonTab(t) { state.lessonTab = t; stopAudio(); render(); }
 function toggleTheme() { state.theme = state.theme === 'light' ? 'dark' : 'light'; document.documentElement.setAttribute('data-theme', state.theme); localStorage.setItem('le_theme', state.theme); render(); }
 function toggleProgress(type) { state.data[state.currentIndex].progress[type] = !state.data[state.currentIndex].progress[type]; saveData(); render(); }
 function saveData() { localStorage.setItem('le_data', JSON.stringify(state.data)); }
 
+// --- AUDIO & SPEECH ---
 function speak(txt) { 
     window.speechSynthesis.cancel(); 
-    const u = new SpeechSynthesisUtterance(txt); 
-    u.lang = 'en-US'; 
+    const u = new SpeechSynthesisUtterance(txt); u.lang = 'en-US'; 
     if (voices[state.selectedVoiceIndex]) u.voice = voices[state.selectedVoiceIndex]; 
-    u.rate = state.voiceRate; 
-    window.speechSynthesis.speak(u); 
+    u.rate = state.voiceRate; window.speechSynthesis.speak(u); 
 }
-
 function stopAudio() { state.isLooping = false; clearInterval(loopInterval); window.speechSynthesis.cancel(); render(); }
 function toggleLoop() { 
     if (state.isLooping) stopAudio(); 
@@ -179,9 +175,8 @@ function toggleLoop() {
     } 
 }
 
-function startDictation(idx, resId, btnId) {
+function startDictation(target, resId, btnId) {
     if (!recognition) return alert("Mic not supported.");
-    const target = state.data[state.currentIndex].home_content.drills[idx].english;
     const btn = document.getElementById(btnId); const res = document.getElementById(resId);
     btn.classList.add('listening'); res.innerHTML = "Listening..."; res.classList.remove('hidden');
     recognition.start();
@@ -189,7 +184,6 @@ function startDictation(idx, resId, btnId) {
         const input = e.results[0][0].transcript;
         const feedback = analyzeSpeech(target, input);
         res.innerHTML = feedback.html;
-        if(feedback.score === 100 && !state.data[state.currentIndex].progress.speak) { state.data[state.currentIndex].progress.speak = true; saveData(); render(); alert("Perfect!"); }
     };
     recognition.onend = () => btn.classList.remove('listening');
 }
@@ -206,14 +200,30 @@ function analyzeSpeech(target, input) {
     return { score, html: `<div style="font-weight:bold; color:${score===100?'var(--success)':'var(--accent)'}">Score: ${score}%</div>${html}` };
 }
 
+// --- TEST FUNCTION ---
+function startTest() {
+    // Listen か Speak どちらかにチェックが入っているものを抽出
+    const completed = state.data.filter(d => d.progress.listen || d.progress.speak);
+    if (completed.length === 0) return alert("まだ学習済みのデータがありません。\nまずは「Listen」か「Speak」にチェックをつけてください！");
+    
+    // ランダムに並び替え
+    state.testQueue = [...completed].sort(() => Math.random() - 0.5);
+    state.testIndex = 0;
+    state.mode = 'test';
+    render();
+}
+
+// --- RENDERING ---
 function render() {
     const app = document.getElementById('app-content');
     const nav = document.querySelector('.bottom-nav');
-    nav.style.display = (state.mode === 'lesson') ? 'none' : 'flex';
+    nav.style.display = (state.mode === 'lesson' || state.mode === 'test') ? 'none' : 'flex';
     document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+    
     if (state.mode === 'list') { document.getElementById('nav-list').classList.add('active'); renderList(app); }
     else if (state.mode === 'settings') { document.getElementById('nav-config').classList.add('active'); renderSettings(app); }
     else if (state.mode === 'lesson') renderLesson(app);
+    else if (state.mode === 'test') { document.getElementById('nav-test').classList.add('active'); renderTest(app); }
 }
 
 function renderList(c) {
@@ -226,8 +236,8 @@ function renderList(c) {
                     <span class="cat-tag cat-${d.category}">${d.category}</span>
                     <span class="level-tag">${d.level}</span>
                     <div class="progress-badges">
-                        <span class="p-badge ${d.progress.listen?'done':''}">🎧 Listen</span>
-                        <span class="p-badge ${d.progress.speak?'done':''}">🗣️ Speak</span>
+                        <span class="p-badge ${d.progress.listen?'done':''}">🎧</span>
+                        <span class="p-badge ${d.progress.speak?'done':''}">🗣️</span>
                     </div>
                 </div>
             </div>
@@ -239,19 +249,10 @@ function renderLesson(c) {
     const d = state.data[state.currentIndex];
     const isListen = state.lessonTab === 'commute';
     c.innerHTML = `
-    <div class="lesson-header">
-        <button class="btn-outline" onclick="setMode('list')" style="width:auto;padding:5px 10px;">← Back</button>
-        <div style="font-weight:bold">${d.commute_content.summary}</div>
-        <div style="width:50px"></div>
-    </div>
-    <div class="lesson-tabs">
-        <div class="l-tab ${isListen?'active':''}" onclick="setLessonTab('commute')">🎧 Commute</div>
-        <div class="l-tab ${!isListen?'active':''}" onclick="setLessonTab('practice')">🗣️ Practice</div>
-    </div>
+    <div class="lesson-header"><button class="btn-outline" onclick="setMode('list')" style="width:auto;padding:5px 10px;">← Back</button><div style="font-weight:bold">${d.commute_content.summary}</div><div style="width:50px"></div></div>
+    <div class="lesson-tabs"><div class="l-tab ${isListen?'active':''}" onclick="setLessonTab('commute')">🎧 Commute</div><div class="l-tab ${!isListen?'active':''}" onclick="setLessonTab('practice')">🗣️ Practice</div></div>
     <div class="card">
-        <button class="btn ${d.progress[isListen?'listen':'speak']?'btn-success':'btn-outline'}" onclick="toggleProgress('${isListen?'listen':'speak'}')">
-            ${d.progress[isListen?'listen':'speak']?'✅ Completed':'⬜ Mark Done'}
-        </button>
+        <button class="btn ${d.progress[isListen?'listen':'speak']?'btn-success':'btn-outline'}" onclick="toggleProgress('${isListen?'listen':'speak'}')">${d.progress[isListen?'listen':'speak']?'✅ Done':'⬜ Mark Done'}</button>
         ${isListen ? renderListenContent(d) : renderSpeakContent(d)}
     </div>
     <div style="display:flex;justify-content:space-between;margin-top:20px">
@@ -262,44 +263,70 @@ function renderLesson(c) {
 
 function renderListenContent(d) {
     return `
-    <div style="margin-top:15px; display:flex; gap:10px;">
-        <button class="btn" onclick="speak(state.data[state.currentIndex].commute_content.english_text)">▶️ Play</button>
-        <button class="btn ${state.isLooping?'btn-accent':'btn-outline'}" onclick="toggleLoop()">${state.isLooping?'🔁 Stop':'🔁 Loop'}</button>
-    </div>
-    <div class="slider-container" style="display:flex; align-items:center; margin-top:15px;">
-        <span style="font-size:0.7rem;">Speed</span>
-        <input type="range" min="0.5" max="1.5" step="0.1" value="${state.voiceRate}" oninput="state.voiceRate=this.value; localStorage.setItem('le_voice_rate',this.value); this.nextElementSibling.innerText=this.value+'x'">
-        <span style="font-size:0.7rem; width:30px;">${state.voiceRate}x</span>
-    </div>
-    <div id="txt-area" class="${state.showText?'':'hidden'}">
-        <div class="text-en">${d.commute_content.english_text}</div>
-        <div class="text-jp">${d.commute_content.japanese_translation}</div>
-        <div class="chunk-view" style="margin-top:10px; border-top:1px dashed var(--border); padding-top:10px;">
-            ${d.commute_content.chunks.split('/').map(c=>`<span>${c}</span><span class="chunk-sep">/</span>`).join('')}
-        </div>
-    </div>
+    <div style="margin-top:15px; display:flex; gap:10px;"><button class="btn" onclick="speak(state.data[state.currentIndex].commute_content.english_text)">▶️ Play</button><button class="btn ${state.isLooping?'btn-accent':'btn-outline'}" onclick="toggleLoop()">${state.isLooping?'🔁 Stop':'🔁 Loop'}</button></div>
+    <div id="txt-area" class="${state.showText?'':'hidden'}"><div class="text-en">${d.commute_content.english_text}</div><div class="text-jp">${d.commute_content.japanese_translation}</div></div>
     <button class="btn-outline" style="margin-top:15px;" onclick="state.showText=!state.showText;render()">${state.showText?'🙈 Hide':'👁️ Show'} Text</button>`;
 }
 
 function renderSpeakContent(d) {
+    const safeEng = (t) => t.replace(/'/g, "\\'");
     return `
-    <div class="pattern-box" style="margin-top:15px;">
-        <div class="pattern-key">${d.home_content.pattern_focus}</div>
-        <div style="font-size:0.85rem;">${d.home_content.pattern_explanation}</div>
-    </div>
+    <div class="pattern-box" style="margin-top:15px;"><div class="pattern-key">${d.home_content.pattern_focus}</div><div style="font-size:0.85rem;">${d.home_content.pattern_explanation}</div></div>
     ${d.home_content.drills.map((q, i) => `
         <div class="drill-card">
             <div style="font-weight:bold; font-size:0.9rem; margin-bottom:8px;">${i+1}. ${q.japanese}</div>
             <div style="display:flex; gap:10px;">
-                <button class="btn btn-mic" id="btn-mic-${i}" onclick="startDictation(${i}, 'res-${i}', 'btn-mic-${i}')" style="flex:1">🎙️ Speak</button>
-                <button class="btn btn-accent" onclick="speak(state.data[state.currentIndex].home_content.drills[${i}].english)" style="width:40px; padding:0;">🔊</button>
+                <button class="btn btn-mic" id="btn-mic-${i}" onclick="startDictation('${safeEng(q.english)}', 'res-${i}', 'btn-mic-${i}')" style="flex:1">🎙️ Speak</button>
+                <button class="btn btn-accent" onclick="speak('${safeEng(q.english)}')" style="width:40px; padding:0;">🔊</button>
                 <button class="btn btn-accent" onclick="document.getElementById('ans-${i}').classList.toggle('hidden')" style="width:40px; padding:0;">👀</button>
             </div>
-            <div id="res-${i}" class="hidden score-box"></div>
-            <div id="ans-${i}" class="hidden" style="margin-top:8px; color:var(--primary); font-weight:bold; font-size:1rem;">${q.english}</div>
+            <div id="res-${i}" class="hidden score-box"></div><div id="ans-${i}" class="hidden" style="margin-top:8px; color:var(--primary); font-weight:bold;">${q.english}</div>
         </div>`).join('')}`;
 }
 
+// --- TEST UI (New!) ---
+function renderTest(c) {
+    const d = state.testQueue[state.testIndex];
+    const safeEng = d.commute_content.english_text.replace(/'/g, "\\'");
+    
+    let nextBtnHTML = "";
+    if (state.testIndex < state.testQueue.length - 1) {
+        nextBtnHTML = `<button class="btn-outline" onclick="state.testIndex++; render()" style="flex:1">Next →</button>`;
+    } else {
+        nextBtnHTML = `<button class="btn-success" onclick="alert('Test Completed! 🎉'); setMode('list')" style="flex:1">Finish</button>`;
+    }
+
+    c.innerHTML = `
+    <div class="lesson-header">
+        <button class="btn-outline" onclick="setMode('list')" style="width:auto;padding:5px 10px;">✕ Quit</button>
+        <div style="font-weight:bold">Test (${state.testIndex+1}/${state.testQueue.length})</div>
+        <div style="width:50px"></div>
+    </div>
+
+    <div class="card" style="text-align:center; padding:30px 20px;">
+        <div style="color:var(--subtext); font-size:0.8rem; margin-bottom:10px;">Translate this:</div>
+        <div style="font-size:1.1rem; font-weight:bold; margin-bottom:20px;">${d.commute_content.japanese_translation}</div>
+        
+        <div style="display:flex; gap:10px; margin-bottom:20px;">
+             <button class="btn btn-mic" id="btn-test-mic" onclick="startDictation('${safeEng}', 'res-test', 'btn-test-mic')" style="flex:1">🎙️ Speak</button>
+             <button class="btn btn-accent" onclick="speak('${safeEng}')" style="width:60px;">🔊</button>
+        </div>
+        
+        <div id="res-test" class="hidden score-box" style="margin-bottom:15px;"></div>
+        
+        <div id="ans-test" class="hidden" style="padding:15px; background:var(--bg); border-radius:8px; border:1px solid var(--border);">
+            <div class="text-en" style="margin:0; font-size:1rem;">${d.commute_content.english_text}</div>
+        </div>
+    </div>
+
+    <div style="display:flex; gap:10px;">
+        <button class="btn" onclick="document.getElementById('ans-test').classList.remove('hidden')" style="flex:1">👁️ Answer</button>
+        ${nextBtnHTML}
+    </div>
+    `;
+}
+
+// --- SETTINGS ---
 function updatePrompt() {
     const topic = document.getElementById('p-topic')?.value || "Business";
     const level = document.getElementById('p-level')?.value || "Intermediate";
@@ -336,7 +363,6 @@ ${instruction}
 }
 
 function copyPrompt() { updatePrompt(); navigator.clipboard.writeText(document.getElementById('p-area').value).then(() => alert('Copied!')); }
-
 function loadJsonData() { 
     try { 
         const d = JSON.parse(document.getElementById('data-input').value); 
@@ -351,7 +377,7 @@ function renderSettings(c) {
     const voiceOpts = voices.map((v,i)=>`<option value="${i}" ${i==state.selectedVoiceIndex?'selected':''}>${v.name}</option>`).join('');
     c.innerHTML = `
     <div class="card">
-        <h2>🤖 AI Prompt Builder v3.9.4</h2>
+        <h2>🤖 AI Prompt Builder v3.9.5</h2>
         <label>Option A: Custom Text (Paste English)</label>
         <textarea id="p-custom-text" oninput="updatePrompt()"></textarea>
         <div style="margin:15px 0; border-top:1px dashed var(--border);"></div>
