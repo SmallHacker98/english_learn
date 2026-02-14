@@ -147,7 +147,7 @@ function loadVoices() {
 }
 
 function setMode(m) { state.mode = m; stopAudio(); render(); }
-function openLesson(i) { state.currentIndex = i; state.mode = 'lesson'; state.lessonTab = 'commute'; stopAudio(); render(); }
+function openLesson(i) { state.currentIndex = i; state.mode = 'lesson'; state.showText = false; state.lessonTab = 'commute'; stopAudio(); render(); }
 function setLessonTab(t) { state.lessonTab = t; stopAudio(); render(); }
 function toggleTheme() { state.theme = state.theme === 'light' ? 'dark' : 'light'; document.documentElement.setAttribute('data-theme', state.theme); localStorage.setItem('le_theme', state.theme); render(); }
 function toggleProgress(type) { state.data[state.currentIndex].progress[type] = !state.data[state.currentIndex].progress[type]; saveData(); render(); }
