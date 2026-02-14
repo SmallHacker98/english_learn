@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Link English v3.9.5</title>
+    <title>Link English v3.9.6</title>
     
     <meta name="theme-color" content="#3b82f6">
     <meta name="mobile-web-app-capable" content="yes">
@@ -94,7 +94,7 @@
 <body>
 
 <header>
-    <div class="app-title">Link English v3.9.5</div>
+    <div class="app-title">Link English v3.9.6</div>
     <button class="theme-toggle" onclick="toggleTheme()">🌙</button>
 </header>
 
@@ -113,6 +113,15 @@
 </div>
 
 <script>
+// --- SERVICE WORKER REGISTRATION (Offline Support) ---
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js')
+            .then(reg => console.log('SW Registered!', reg))
+            .catch(err => console.log('SW Failed', err));
+    });
+}
+
 // --- CORE DATA ---
 const manifest = { "name": "Link English", "short_name": "LinkEng", "start_url": ".", "display": "standalone", "background_color": "#f8fafc", "theme_color": "#3b82f6", "icons": [{ "src": "data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🦉</text></svg>", "sizes": "512x512", "type": "image/svg+xml" }] };
 document.getElementById('my-manifest').setAttribute('href', 'data:application/manifest+json;charset=utf-8,' + encodeURIComponent(JSON.stringify(manifest)));
@@ -121,7 +130,7 @@ let state = {
     data: [], currentIndex: 0, mode: 'list', lessonTab: 'commute',
     theme: 'light', showText: false, selectedVoiceIndex: -1, voiceRate: 1.0, 
     isLooping: false, promptTopic: "Business", promptLevel: "Intermediate", promptQty: 3,
-    testQueue: [], testIndex: 0 // テスト用変数
+    testQueue: [], testIndex: 0 
 };
 let voices = [], loopInterval = null, recognition = null;
 
@@ -202,11 +211,8 @@ function analyzeSpeech(target, input) {
 
 // --- TEST FUNCTION ---
 function startTest() {
-    // Listen か Speak どちらかにチェックが入っているものを抽出
     const completed = state.data.filter(d => d.progress.listen || d.progress.speak);
     if (completed.length === 0) return alert("まだ学習済みのデータがありません。\nまずは「Listen」か「Speak」にチェックをつけてください！");
-    
-    // ランダムに並び替え
     state.testQueue = [...completed].sort(() => Math.random() - 0.5);
     state.testIndex = 0;
     state.mode = 'test';
@@ -284,7 +290,6 @@ function renderSpeakContent(d) {
         </div>`).join('')}`;
 }
 
-// --- TEST UI (New!) ---
 function renderTest(c) {
     const d = state.testQueue[state.testIndex];
     const safeEng = d.commute_content.english_text.replace(/'/g, "\\'");
@@ -302,31 +307,24 @@ function renderTest(c) {
         <div style="font-weight:bold">Test (${state.testIndex+1}/${state.testQueue.length})</div>
         <div style="width:50px"></div>
     </div>
-
     <div class="card" style="text-align:center; padding:30px 20px;">
         <div style="color:var(--subtext); font-size:0.8rem; margin-bottom:10px;">Translate this:</div>
         <div style="font-size:1.1rem; font-weight:bold; margin-bottom:20px;">${d.commute_content.japanese_translation}</div>
-        
         <div style="display:flex; gap:10px; margin-bottom:20px;">
              <button class="btn btn-mic" id="btn-test-mic" onclick="startDictation('${safeEng}', 'res-test', 'btn-test-mic')" style="flex:1">🎙️ Speak</button>
              <button class="btn btn-accent" onclick="speak('${safeEng}')" style="width:60px;">🔊</button>
         </div>
-        
         <div id="res-test" class="hidden score-box" style="margin-bottom:15px;"></div>
-        
         <div id="ans-test" class="hidden" style="padding:15px; background:var(--bg); border-radius:8px; border:1px solid var(--border);">
             <div class="text-en" style="margin:0; font-size:1rem;">${d.commute_content.english_text}</div>
         </div>
     </div>
-
     <div style="display:flex; gap:10px;">
         <button class="btn" onclick="document.getElementById('ans-test').classList.remove('hidden')" style="flex:1">👁️ Answer</button>
         ${nextBtnHTML}
-    </div>
-    `;
+    </div>`;
 }
 
-// --- SETTINGS ---
 function updatePrompt() {
     const topic = document.getElementById('p-topic')?.value || "Business";
     const level = document.getElementById('p-level')?.value || "Intermediate";
@@ -377,7 +375,7 @@ function renderSettings(c) {
     const voiceOpts = voices.map((v,i)=>`<option value="${i}" ${i==state.selectedVoiceIndex?'selected':''}>${v.name}</option>`).join('');
     c.innerHTML = `
     <div class="card">
-        <h2>🤖 AI Prompt Builder v3.9.5</h2>
+        <h2>🤖 AI Prompt Builder v3.9.6</h2>
         <label>Option A: Custom Text (Paste English)</label>
         <textarea id="p-custom-text" oninput="updatePrompt()"></textarea>
         <div style="margin:15px 0; border-top:1px dashed var(--border);"></div>
