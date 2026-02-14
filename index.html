@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Link English v3.9.3</title>
+    <title>Link English v3.9.4</title>
     
     <meta name="theme-color" content="#3b82f6">
     <meta name="mobile-web-app-capable" content="yes">
@@ -94,7 +94,7 @@
 <body>
 
 <header>
-    <div class="app-title">Link English v3.9.3</div>
+    <div class="app-title">Link English v3.9.4</div>
     <button class="theme-toggle" onclick="toggleTheme()">🌙</button>
 </header>
 
@@ -110,7 +110,6 @@
 </div>
 
 <script>
-// --- CORE LOGIC ---
 const manifest = { "name": "Link English", "short_name": "LinkEng", "start_url": ".", "display": "standalone", "background_color": "#f8fafc", "theme_color": "#3b82f6", "icons": [{ "src": "data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🦉</text></svg>", "sizes": "512x512", "type": "image/svg+xml" }] };
 document.getElementById('my-manifest').setAttribute('href', 'data:application/manifest+json;charset=utf-8,' + encodeURIComponent(JSON.stringify(manifest)));
 
@@ -147,7 +146,16 @@ function loadVoices() {
 }
 
 function setMode(m) { state.mode = m; stopAudio(); render(); }
-function openLesson(i) { state.currentIndex = i; state.mode = 'lesson'; state.showText = false; state.lessonTab = 'commute'; stopAudio(); render(); }
+
+function openLesson(i) { 
+    state.currentIndex = i; 
+    state.mode = 'lesson'; 
+    state.lessonTab = 'commute'; 
+    state.showText = false; // 次の例題に移った時は必ずテキストを隠す
+    stopAudio(); 
+    render(); 
+}
+
 function setLessonTab(t) { state.lessonTab = t; stopAudio(); render(); }
 function toggleTheme() { state.theme = state.theme === 'light' ? 'dark' : 'light'; document.documentElement.setAttribute('data-theme', state.theme); localStorage.setItem('le_theme', state.theme); render(); }
 function toggleProgress(type) { state.data[state.currentIndex].progress[type] = !state.data[state.currentIndex].progress[type]; saveData(); render(); }
@@ -198,7 +206,6 @@ function analyzeSpeech(target, input) {
     return { score, html: `<div style="font-weight:bold; color:${score===100?'var(--success)':'var(--accent)'}">Score: ${score}%</div>${html}` };
 }
 
-// --- RENDERING ---
 function render() {
     const app = document.getElementById('app-content');
     const nav = document.querySelector('.bottom-nav');
@@ -285,16 +292,16 @@ function renderSpeakContent(d) {
             <div style="font-weight:bold; font-size:0.9rem; margin-bottom:8px;">${i+1}. ${q.japanese}</div>
             <div style="display:flex; gap:10px;">
                 <button class="btn btn-mic" id="btn-mic-${i}" onclick="startDictation(${i}, 'res-${i}', 'btn-mic-${i}')" style="flex:1">🎙️ Speak</button>
-                <button class="btn btn-accent" onclick="document.getElementById('ans-${i}').classList.toggle('hidden')" style="width:60px">👀</button>
+                <button class="btn btn-accent" onclick="speak(state.data[state.currentIndex].home_content.drills[${i}].english)" style="width:40px; padding:0;">🔊</button>
+                <button class="btn btn-accent" onclick="document.getElementById('ans-${i}').classList.toggle('hidden')" style="width:40px; padding:0;">👀</button>
             </div>
             <div id="res-${i}" class="hidden score-box"></div>
             <div id="ans-${i}" class="hidden" style="margin-top:8px; color:var(--primary); font-weight:bold; font-size:1rem;">${q.english}</div>
         </div>`).join('')}`;
 }
 
-// --- SETTINGS & PROMPT BUILDER ---
 function updatePrompt() {
-    const topic = document.getElementById('p-topic')?.value || "General";
+    const topic = document.getElementById('p-topic')?.value || "Business";
     const level = document.getElementById('p-level')?.value || "Intermediate";
     const qty = document.getElementById('p-qty')?.value || 3;
     const customText = document.getElementById('p-custom-text')?.value.trim() || "";
@@ -329,6 +336,7 @@ ${instruction}
 }
 
 function copyPrompt() { updatePrompt(); navigator.clipboard.writeText(document.getElementById('p-area').value).then(() => alert('Copied!')); }
+
 function loadJsonData() { 
     try { 
         const d = JSON.parse(document.getElementById('data-input').value); 
@@ -343,7 +351,7 @@ function renderSettings(c) {
     const voiceOpts = voices.map((v,i)=>`<option value="${i}" ${i==state.selectedVoiceIndex?'selected':''}>${v.name}</option>`).join('');
     c.innerHTML = `
     <div class="card">
-        <h2>🤖 AI Prompt Builder v3.9.3</h2>
+        <h2>🤖 AI Prompt Builder v3.9.4</h2>
         <label>Option A: Custom Text (Paste English)</label>
         <textarea id="p-custom-text" oninput="updatePrompt()"></textarea>
         <div style="margin:15px 0; border-top:1px dashed var(--border);"></div>
