@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Link English v3.9.6</title>
+    <title>Link English v3.9.7</title>
     
     <meta name="theme-color" content="#3b82f6">
     <meta name="mobile-web-app-capable" content="yes">
@@ -94,7 +94,7 @@
 <body>
 
 <header>
-    <div class="app-title">Link English v3.9.6</div>
+    <div class="app-title">Link English v3.9.7</div>
     <button class="theme-toggle" onclick="toggleTheme()">🌙</button>
 </header>
 
@@ -117,7 +117,18 @@
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
         navigator.serviceWorker.register('./sw.js')
-            .then(reg => console.log('SW Registered!', reg))
+            .then(reg => {
+                console.log('SW Registered!', reg);
+                reg.onupdatefound = () => {
+                    const installingWorker = reg.installing;
+                    installingWorker.onstatechange = () => {
+                        if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                            // 新しいバージョンが見つかった場合の処理
+                            console.log('New content is available; please refresh.');
+                        }
+                    };
+                };
+            })
             .catch(err => console.log('SW Failed', err));
     });
 }
@@ -270,7 +281,13 @@ function renderLesson(c) {
 function renderListenContent(d) {
     return `
     <div style="margin-top:15px; display:flex; gap:10px;"><button class="btn" onclick="speak(state.data[state.currentIndex].commute_content.english_text)">▶️ Play</button><button class="btn ${state.isLooping?'btn-accent':'btn-outline'}" onclick="toggleLoop()">${state.isLooping?'🔁 Stop':'🔁 Loop'}</button></div>
-    <div id="txt-area" class="${state.showText?'':'hidden'}"><div class="text-en">${d.commute_content.english_text}</div><div class="text-jp">${d.commute_content.japanese_translation}</div></div>
+    <div id="txt-area" class="${state.showText?'':'hidden'}">
+        <div class="text-en">${d.commute_content.english_text}</div>
+        <div class="text-jp">${d.commute_content.japanese_translation}</div>
+        <div class="chunk-view" style="margin-top:10px; border-top:1px dashed var(--border); padding-top:10px;">
+            ${d.commute_content.chunks.split('/').map(c=>`<span>${c}</span><span class="chunk-sep">/</span>`).join('')}
+        </div>
+    </div>
     <button class="btn-outline" style="margin-top:15px;" onclick="state.showText=!state.showText;render()">${state.showText?'🙈 Hide':'👁️ Show'} Text</button>`;
 }
 
@@ -375,7 +392,7 @@ function renderSettings(c) {
     const voiceOpts = voices.map((v,i)=>`<option value="${i}" ${i==state.selectedVoiceIndex?'selected':''}>${v.name}</option>`).join('');
     c.innerHTML = `
     <div class="card">
-        <h2>🤖 AI Prompt Builder v3.9.6</h2>
+        <h2>🤖 AI Prompt Builder v3.9.7</h2>
         <label>Option A: Custom Text (Paste English)</label>
         <textarea id="p-custom-text" oninput="updatePrompt()"></textarea>
         <div style="margin:15px 0; border-top:1px dashed var(--border);"></div>
