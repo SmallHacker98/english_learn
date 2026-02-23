@@ -28,8 +28,7 @@
             --status-done: #064e3b; --status-done-t: #6ee7b7;
             --tab-active-bg: #1e293b; --tab-active-t: #60a5fa;
         }
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background-color: var(--bg); color: var(--text); margin: 0; display: flex; flex-direction: column; height: 100vh; overscroll-behavior: none; }
-        
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background-color: var(--bg); color: var(--text); margin: 0; display: flex; flex-direction: column; height: 100vh; height: 100dvh; overscroll-behavior: none; -webkit-overflow-scrolling: touch; }        
         header { background-color: var(--card); border-bottom: 1px solid var(--border); padding: 0.8rem; display: flex; justify-content: space-between; align-items: center; padding-top: env(safe-area-inset-top); z-index: 10;}
         .app-title { font-weight: bold; font-size: 1.1rem; }
         .theme-toggle { background: none; border: none; font-size: 1.2rem; cursor: pointer; }
@@ -229,15 +228,33 @@ function analyzeSpeech(target, input) {
 }
 
 // --- RENDERING ---
+// --- RENDERING ---
 function render() {
     const app = document.getElementById('app-content');
     const nav = document.querySelector('.bottom-nav');
-    nav.style.display = (state.mode === 'lesson' || state.mode === 'test') ? 'none' : 'flex';
+    
+    // ★ここを修正: 常に 'flex' にして下部ナビゲーションを隠さない！
+    nav.style.display = 'flex';
+    
     document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
     
-    if (state.mode === 'list') { document.getElementById('nav-list').classList.add('active'); renderList(app); }
-    else if (state.mode === 'settings') { document.getElementById('nav-config').classList.add('active'); renderSettings(app); }
-    else if (state.mode === 'lesson') renderLesson(app);
+    if (state.mode === 'list') { 
+        document.getElementById('nav-list').classList.add('active'); 
+        renderList(app); 
+    }
+    else if (state.mode === 'settings') { 
+        document.getElementById('nav-config').classList.add('active'); 
+        renderSettings(app); 
+    }
+    else if (state.mode === 'lesson') { 
+        // レッスン中も「List」をアクティブ状態にしておく
+        document.getElementById('nav-list').classList.add('active'); 
+        renderLesson(app); 
+    }
+    else if (state.mode === 'test') { 
+        document.getElementById('nav-test').classList.add('active'); 
+        renderTest(app); 
+    }
 }
 
 function renderList(c) {
