@@ -7,8 +7,7 @@ const ASSETS = [
 
 // インストール時にキャッシュを作成
 self.addEventListener('install', (e) => {
-    // 古いキャッシュと競合しないよう skipWaiting を呼ぶことも多いが、
-    // ここではシンプルに新しいキャッシュを作成
+    self.skipWaiting(); // ← これを追加！待機せずにすぐ最新版を適用する
     e.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(ASSETS)));
 });
 
