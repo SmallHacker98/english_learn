@@ -662,8 +662,12 @@ function handleMode2Result(input) {
         else if(score >= 80) resStr = 'retry';
     }
     
-    // ★修正：タイムアウトでも音声入力ありでも、必ずSRSエンジンを通す！
+    // SRSエンジンを通す
     updateSRS(m2.currentStatsObj.stats, resStr, score);
+    
+    // 💡 ★追加：「モード2を実施済み」という専用のフラグを立てる！
+    m2.currentStatsObj.stats.tested_in_m2 = true;
+    
     saveData();
 
     document.getElementById('mode2-content').innerHTML = `
@@ -796,39 +800,52 @@ function renderSettings(c) {
 
 // Disable old startTest temporarily until smart-test is implemented next
 // --- SMART TEST MODE ---
+// --- SMART TEST MODE ---
 function startTest() {
     let dueItems = [];
     const now = Date.now();
     
-    // 全レッスンから「未テスト」または「復習時期を過ぎた」フレーズを抽出
+    // 全レッスンから「モード2実施済み」かつ「復習時期を過ぎた」フレーズだけを抽出
     state.data.forEach((d) => {
-        const check = (obj, jp, en) => {
+        const check = (obj, jp, targetText) => {
             let st = obj.stats;
-            if (!st.result || st.next_review <= now) {
-                // 優先度：昔にテストしたものほど優先。未テスト(0)は最優先。
+            // 💡 ★修正：まったくの未テストは除外。tested_in_m2フラグがあるものだけ！
+            if (st.tested_in_m2 && st.next_review <= now) {
                 let priority = st.next_review || 0; 
-                dueItems.push({ obj: obj, jp: jp, en: en, priority: priority });
+                dueItems.push({ obj: obj, jp: jp, targetText: targetText, priority: priority });
             }
         };
-        check(d.commute_content, d.commute_content.japanese_translation, d.commute_content.english_text);
-        d.home_content.drills.forEach(drill => check(drill, drill.japanese, drill.english));
+        
+        // 英語版・フランス語版どちらのファイルでも動くように自動判別
+        let commuteTarget = d.commute_content.english_text || d.commute_content.french_text;
+        check(d.commute_content, d.commute_content.japanese_translation, commuteTarget);
+        
+        d.home_content.drills.forEach(drill => {
+            let drillTarget = drill.english || drill.french;
+            check(drill, drill.japanese, drillTarget);
+        });
     });
     
     if (dueItems.length === 0) {
-        alert("🎉 今のところ復習が必要なフレーズはありません！完璧です！");
+        // 💡 メッセージも少し親切に変更
+        alert("🎉 今のところテスト対象はありません！（※モード2で練習済みの問題から出題されます）");
         setMode('list');
         return;
     }
     
-    // 優先度（古い順）に並び替え
     dueItems.sort((a, b) => a.priority - b.priority);
-    
-    // 疲れないように最大10問に絞り、実際に出題する時はランダムシャッフル
     let testQueue = dueItems.slice(0, 10).sort(() => Math.random() - 0.5);
     
-    m2.queue = testQueue.map(item => ({ type: 'test', jp: item.jp, en: item.en, obj: item.obj }));
+    // enとfr両方のプロパティに入れておくことで言語バージョンを問わず動くマジック
+    m2.queue = testQueue.map(item => ({ 
+        type: 'test', 
+        jp: item.jp, 
+        en: item.targetText, 
+        fr: item.targetText, 
+        obj: item.obj 
+    }));
     m2.currentIndex = 0;
-    m2.isTestMode = true; // テストとモード2を判別するフラグ（おまけ）
+    m2.isTestMode = true; 
     
     const modal = document.getElementById('mode2-modal');
     modal.classList.remove('hidden');
@@ -840,7 +857,6 @@ function startTest() {
         <br><button class="btn btn-outline" style="margin-top:15px; border:none;" onclick="closeMode2()">Cancel</button>
     `;
     
-    // UI上のタブをテストに切り替え
     document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
     document.getElementById('nav-test').classList.add('active');
     state.mode = 'test';
