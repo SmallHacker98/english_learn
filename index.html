@@ -601,6 +601,7 @@ function loadJsonData() {
         }
     } catch(e) { alert('Invalid JSON'); } 
 }
+    
 function renderSettings(c) {
     const voiceOpts = voices.map((v,i)=>`<option value="${i}" ${i==state.selectedVoiceIndex?'selected':''}>${v.name}</option>`).join('');
     c.innerHTML = `
@@ -632,8 +633,23 @@ function renderSettings(c) {
         <h2>Data & Voice</h2>
         <textarea id="data-input" placeholder="Paste JSON from Gemini here..."></textarea>
         <button class="btn" onclick="loadJsonData()" style="margin-top:10px;">Load Data</button>
-        <div style="margin-top:20px;"><label>Voice</label><select onchange="state.selectedVoiceIndex=this.value;localStorage.setItem('le_voice_index',this.value)">${voiceOpts}</select></div>
-        <button class="btn-outline" onclick="localStorage.removeItem('le_data'); location.reload();" style="margin-top:20px; border-color:var(--danger); color:var(--danger);">⚠️ Reset All Data</button>
+        
+        <div style="margin-top:20px;">
+            <label>Voice</label>
+            <select onchange="state.selectedVoiceIndex=this.value;localStorage.setItem('le_voice_index',this.value)">${voiceOpts}</select>
+        </div>
+
+        <div style="margin-top:20px;">
+            <label>Speed: <span id="rate-val">${Number(state.voiceRate).toFixed(1)}</span>x</label>
+            <div style="display:flex; align-items:center;">
+                <span style="font-size:1.2rem;">🐢</span>
+                <input type="range" min="0.5" max="2.0" step="0.1" value="${state.voiceRate}" 
+                    oninput="state.voiceRate=parseFloat(this.value); localStorage.setItem('le_voice_rate', this.value); document.getElementById('rate-val').innerText=Number(this.value).toFixed(1);">
+                <span style="font-size:1.2rem;">🐇</span>
+            </div>
+        </div>
+        
+        <button class="btn-outline" onclick="localStorage.removeItem('le_data'); location.reload();" style="margin-top:30px; border-color:var(--danger); color:var(--danger);">⚠️ Reset All Data</button>
     </div>`;
     
     setTimeout(updatePrompt, 50);
