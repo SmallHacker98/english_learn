@@ -244,37 +244,40 @@ function analyzeSpeech(target, input) {
 }
 
     // --- MODE 1: マイク録音処理（startDictation） ---
+// --- MODE 1: マイク録音処理（startDictation） ---
 function startDictation(target, resId, btnId) {
     if (!recognition) return alert("このブラウザは音声認識に対応していません。");
     
     const btn = document.getElementById(btnId); 
     const res = document.getElementById(resId);
     
-    // UIを「録音中」に変更
     btn.classList.add('listening'); 
     res.innerHTML = "Listening... (話してください)"; 
     res.classList.remove('hidden');
     
-    // マイク起動（Androidの連続タップエラー防止のためtry-catchを入れています）
     try {
         recognition.start();
     } catch(e) {
         console.warn("マイクはすでに待機中です", e);
     }
 
-    // 音声を拾った時の処理
     recognition.onresult = (e) => {
         const input = e.results[0][0].transcript;
-        const feedback = analyzeSpeech(target, input); // 判定処理に投げる
+        const feedback = analyzeSpeech(target, input); 
         res.innerHTML = feedback.html;
+        
+        // 💡 【追加】判定が終わった瞬間に、対応するAnswerエリアを自動で開く
+        const ansId = resId.replace('res', 'ans'); // 'm1-res-0' を 'm1-ans-0' に変換して探す
+        const ansElement = document.getElementById(ansId);
+        if (ansElement) {
+            ansElement.classList.remove('hidden');
+        }
     };
     
-    // 録音が終わった時の処理
     recognition.onend = () => {
         btn.classList.remove('listening');
     };
 
-    // 音が拾えなかった時などのエラー処理
     recognition.onerror = (e) => {
         if(e.error === 'no-speech') {
             res.innerHTML = `<div style="color:var(--danger); font-size:0.8rem;">音声が検出されませんでした</div>`;
@@ -284,8 +287,8 @@ function startDictation(target, resId, btnId) {
         btn.classList.remove('listening');
     };
 }
-// --- RENDERING ---
-// --- RENDERING ---
+
+    // --- RENDERING ---
 function render() {
     const app = document.getElementById('app-content');
     const nav = document.querySelector('.bottom-nav');
