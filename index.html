@@ -543,12 +543,26 @@ function renderSettings(c) {
         <h2>🤖 AI Prompt Builder v4.0</h2>
         <label>Topic</label>
         <input type="text" id="p-topic" value="${state.promptTopic}" oninput="updatePrompt()">
+        
         <div class="form-row" style="margin-top:10px;">
-            <div class="form-col"><label>Level</label><select id="p-level" onchange="updatePrompt()"><option>Intermediate</option><option>Advanced</option><option>Beginner</option></select></div>
+            <div class="form-col">
+                <label>Level</label>
+                <select id="p-level" onchange="updatePrompt()">
+                    <option>Intermediate</option>
+                    <option>Advanced</option>
+                    <option>Beginner</option>
+                </select>
+            </div>
+            <div class="form-col" style="flex:0 0 70px;">
+                <label>Qty</label>
+                <input type="number" id="p-qty" value="${state.promptQty || 3}" oninput="updatePrompt()">
+            </div>
         </div>
+        
         <textarea id="p-area" style="font-size:0.6rem; height:120px; margin-top:15px;" readonly></textarea>
         <button class="btn btn-outline" onclick="copyPrompt()">📋 Copy Prompt</button>
     </div>
+    
     <div class="card">
         <h2>Data & Voice</h2>
         <textarea id="data-input" placeholder="Paste JSON from Gemini here..."></textarea>
@@ -556,6 +570,7 @@ function renderSettings(c) {
         <div style="margin-top:20px;"><label>Voice</label><select onchange="state.selectedVoiceIndex=this.value;localStorage.setItem('le_voice_index',this.value)">${voiceOpts}</select></div>
         <button class="btn-outline" onclick="localStorage.removeItem('le_data'); location.reload();" style="margin-top:20px; border-color:var(--danger); color:var(--danger);">⚠️ Reset All Data</button>
     </div>`;
+    
     setTimeout(updatePrompt, 50);
 }
 
