@@ -370,18 +370,50 @@ function render() {
 }
 
 function renderList(c) {
-    if (state.data.length === 0) { c.innerHTML = '<div style="text-align:center;padding:40px;color:var(--subtext)">No lessons.<br>Add some in Config!</div>'; return; }
-    c.innerHTML = state.data.map((d, i) => `
+    if (state.data.length === 0) { 
+        c.innerHTML = '<div style="text-align:center;padding:40px;color:var(--subtext)">No lessons.<br>Add some in Config!</div>'; 
+        return; 
+    }
+    
+    c.innerHTML = state.data.map((d, i) => {
+        // Speakの習熟度（6問分のステータス）を丸いドットで生成
+        let dotsHtml = '';
+        let items = [d.commute_content, ...d.home_content.drills];
+        
+        items.forEach(item => {
+            let color = '#e2e8f0'; // 未実施（グレー）
+            if (item && item.stats && item.stats.result) {
+                if (item.stats.result === 'good') color = 'var(--success)'; // 🟢
+                else if (item.stats.result === 'retry') color = 'var(--accent)'; // 🟡
+                else if (item.stats.result === 'nogood') color = 'var(--danger)'; // 🔴
+            }
+            dotsHtml += `<div style="width:10px; height:10px; border-radius:50%; background-color:${color};"></div>`;
+        });
+
+        // Listenの完了状態アイコン
+        const listenIcon = d.progress.listen ? '🎧 ✅' : '🎧 ⬜';
+        const listenColor = d.progress.listen ? 'var(--success)' : 'var(--subtext)';
+
+        return `
         <div class="list-item" onclick="openLesson(${i})">
             <div class="list-content">
                 <div class="list-summary">${d.commute_content.summary}</div>
-                <div class="list-meta">
+                <div class="list-meta" style="margin-bottom:10px;">
                     <span class="cat-tag cat-${d.category}">${d.category}</span>
                     <span class="level-tag">${d.level}</span>
                 </div>
+                
+                <div style="display:flex; align-items:center; gap:15px; font-size:0.85rem;">
+                    <div style="font-weight:bold; color:${listenColor};">${listenIcon}</div>
+                    <div style="display:flex; gap:4px; align-items:center;">
+                        <span style="color:var(--subtext);">🗣️</span>
+                        ${dotsHtml}
+                    </div>
+                </div>
             </div>
             <span>›</span>
-        </div>`).join('');
+        </div>`;
+    }).join('');
 }
 
 function renderLesson(c) {
@@ -415,6 +447,10 @@ function renderListenContent(d) {
             <span style="font-size:1.2rem;">🐇</span>
         </div>
     </div>
+
+    <button class="btn ${d.progress.listen ? 'btn-success' : 'btn-outline'}" style="margin-top:15px; font-weight:bold;" onclick="toggleProgress('listen')">
+        ${d.progress.listen ? '✅ Listen Done (完了)' : '🎧 Mark as Listen Done'}
+    </button>
 
     <div id="txt-area" class="${state.showText?'':'hidden'}">
         <div class="text-en">${d.commute_content.english_text}</div>
