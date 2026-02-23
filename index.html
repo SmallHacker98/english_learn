@@ -243,6 +243,47 @@ function analyzeSpeech(target, input) {
     return { score, html: `<div style="font-weight:bold; color:${score===100?'var(--success)':'var(--danger)'}">Score: ${score}%</div>${html}` };
 }
 
+    // --- MODE 1: マイク録音処理（startDictation） ---
+function startDictation(target, resId, btnId) {
+    if (!recognition) return alert("このブラウザは音声認識に対応していません。");
+    
+    const btn = document.getElementById(btnId); 
+    const res = document.getElementById(resId);
+    
+    // UIを「録音中」に変更
+    btn.classList.add('listening'); 
+    res.innerHTML = "Listening... (話してください)"; 
+    res.classList.remove('hidden');
+    
+    // マイク起動（Androidの連続タップエラー防止のためtry-catchを入れています）
+    try {
+        recognition.start();
+    } catch(e) {
+        console.warn("マイクはすでに待機中です", e);
+    }
+
+    // 音声を拾った時の処理
+    recognition.onresult = (e) => {
+        const input = e.results[0][0].transcript;
+        const feedback = analyzeSpeech(target, input); // 判定処理に投げる
+        res.innerHTML = feedback.html;
+    };
+    
+    // 録音が終わった時の処理
+    recognition.onend = () => {
+        btn.classList.remove('listening');
+    };
+
+    // 音が拾えなかった時などのエラー処理
+    recognition.onerror = (e) => {
+        if(e.error === 'no-speech') {
+            res.innerHTML = `<div style="color:var(--danger); font-size:0.8rem;">音声が検出されませんでした</div>`;
+        } else {
+            res.innerHTML = `<div style="color:var(--danger); font-size:0.8rem;">エラー: ${e.error}</div>`;
+        }
+        btn.classList.remove('listening');
+    };
+}
 // --- RENDERING ---
 // --- RENDERING ---
 function render() {
