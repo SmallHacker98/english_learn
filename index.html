@@ -109,6 +109,9 @@
     <div class="nav-item" id="nav-test" onclick="startTest()">
         <span class="nav-icon">🎯</span>Test
     </div>
+    <div class="nav-item" id="nav-stats" onclick="setMode('stats')">
+        <span class="nav-icon">📊</span>Stats
+    </div>
     <div class="nav-item" id="nav-config" onclick="setMode('settings')">
         <span class="nav-icon">⚙️</span>Config
     </div>
@@ -292,29 +295,78 @@ function startDictation(target, resId, btnId) {
 function render() {
     const app = document.getElementById('app-content');
     const nav = document.querySelector('.bottom-nav');
-    
-    // ★ここを修正: 常に 'flex' にして下部ナビゲーションを隠さない！
-    nav.style.display = 'flex';
+    nav.style.display = 'flex'; // 常に表示
     
     document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
     
-    if (state.mode === 'list') { 
-        document.getElementById('nav-list').classList.add('active'); 
-        renderList(app); 
+    if (state.mode === 'list') { document.getElementById('nav-list').classList.add('active'); renderList(app); }
+    else if (state.mode === 'settings') { document.getElementById('nav-config').classList.add('active'); renderSettings(app); }
+    else if (state.mode === 'lesson') { document.getElementById('nav-list').classList.add('active'); renderLesson(app); }
+    else if (state.mode === 'test') { document.getElementById('nav-test').classList.add('active'); renderTest(app); }
+    // 💡 Statsモードの切り替えを追加
+    else if (state.mode === 'stats') { document.getElementById('nav-stats').classList.add('active'); renderStats(app); }
+}
+
+    function renderStats(c) {
+    if (state.data.length === 0) {
+        c.innerHTML = '<div style="text-align:center;padding:40px;color:var(--subtext)">データがありません。</div>';
+        return;
     }
-    else if (state.mode === 'settings') { 
-        document.getElementById('nav-config').classList.add('active'); 
-        renderSettings(app); 
+
+    let total = 0, good = 0, retry = 0, nogood = 0, untested = 0;
+    let weakPhrases = [];
+
+    // 全データを走査して集計
+    state.data.forEach((d, lessonIndex) => {
+        const checkStat = (item, jp, en, isCommute, drillIndex) => {
+            total++;
+            if (item && item.stats && item.stats.result) {
+                const res = item.stats.result;
+                if (res === 'good') good++;
+                else if (res === 'retry') { retry++; weakPhrases.push({jp, en, res, lessonIndex}); }
+                else if (res === 'nogood') { nogood++; weakPhrases.push({jp, en, res, lessonIndex}); }
+            } else {
+                untested++;
+            }
+        };
+
+        checkStat(d.commute_content, d.commute_content.japanese_translation, d.commute_content.english_text, true, -1);
+        d.home_content.drills.forEach((drill, i) => checkStat(drill, drill.japanese, drill.english, false, i));
+    });
+
+    const goodPct = total === 0 ? 0 : Math.round((good / total) * 100);
+
+    let html = `
+    <h2 style="margin-top:0;">📊 Learning Stats</h2>
+    <div class="card" style="text-align:center; padding:20px;">
+        <div style="font-size:3rem; font-weight:bold; color:var(--primary); line-height:1;">${goodPct}<span style="font-size:1.5rem">%</span></div>
+        <div style="color:var(--subtext); font-size:0.9rem; margin-bottom:15px;">Mastery Rate (定着率)</div>
+        
+        <div style="display:flex; justify-content:space-around; align-items:center; background:var(--bg); padding:10px; border-radius:8px;">
+            <div style="text-align:center;"><div style="font-size:1.2rem;">${good}</div><span class="score-chip sc-good">✅ Good</span></div>
+            <div style="text-align:center;"><div style="font-size:1.2rem;">${retry}</div><span class="score-chip" style="background:var(--accent);color:white;">🔄 Retry</span></div>
+            <div style="text-align:center;"><div style="font-size:1.2rem;">${nogood}</div><span class="score-chip sc-bad">❌ No Good</span></div>
+        </div>
+        <div style="font-size:0.8rem; color:var(--subtext); margin-top:10px;">未テスト: ${untested} / 全${total}フレーズ</div>
+    </div>`;
+
+    if (weakPhrases.length > 0) {
+        html += `<h3 style="margin-top:25px; border-bottom:2px solid var(--danger); display:inline-block;">🔥 Needs Work (弱点: ${weakPhrases.length})</h3>`;
+        // 最新の弱点を10件まで表示
+        weakPhrases.reverse().slice(0, 10).forEach(wp => {
+            const badge = wp.res === 'nogood' ? '❌ No Good' : '🔄 Retry';
+            html += `
+            <div class="card" style="padding:15px; margin-bottom:10px; border-left:4px solid ${wp.res === 'nogood' ? 'var(--danger)' : 'var(--accent)'};" onclick="openLesson(${wp.lessonIndex})">
+                <div style="font-size:0.8rem; color:var(--subtext); margin-bottom:5px;">${wp.jp}</div>
+                <div style="font-weight:bold; font-size:1rem;">${wp.en}</div>
+                <div style="margin-top:8px; font-size:0.8rem; font-weight:bold; color:${wp.res === 'nogood' ? 'var(--danger)' : 'var(--accent)'};">${badge}</div>
+            </div>`;
+        });
+    } else if (good > 0) {
+        html += `<div class="card" style="text-align:center; padding:30px; color:var(--success); font-weight:bold; font-size:1.1rem;">🎉 弱点はありません！完璧です！</div>`;
     }
-    else if (state.mode === 'lesson') { 
-        // レッスン中も「List」をアクティブ状態にしておく
-        document.getElementById('nav-list').classList.add('active'); 
-        renderLesson(app); 
-    }
-    else if (state.mode === 'test') { 
-        document.getElementById('nav-test').classList.add('active'); 
-        renderTest(app); 
-    }
+
+    c.innerHTML = html;
 }
 
 function renderList(c) {
