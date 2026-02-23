@@ -1,33 +1,570 @@
-// sw.js (Link English v3.9.7)
-const CACHE_NAME = 'link-english-v3.9.7';
-const ASSETS = [
-    './',
-    './index.html'
-];
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Link English v4.0</title>
+    
+    <meta name="theme-color" content="#3b82f6">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="icon" type="image/png" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🦉</text></svg>">
+    <link rel="manifest" id="my-manifest">
 
-// インストール時にキャッシュを作成
-self.addEventListener('install', (e) => {
-    self.skipWaiting(); // ← これを追加！待機せずにすぐ最新版を適用する
-    e.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(ASSETS)));
-});
+    <style>
+        /* --- Base Styles --- */
+        :root {
+            --primary: #3b82f6; --bg: #f8fafc; --card: #ffffff; --text: #1e293b; --subtext: #64748b;
+            --border: #e2e8f0; --accent: #f59e0b; --danger: #ef4444; --success: #10b981;
+            --cat-bus: #dbeafe; --cat-bus-t: #1e40af; --cat-day: #dcfce7; --cat-day-t: #166534;
+            --cat-trv: #fce7f3; --cat-trv-t: #9d174d; --cat-toe: #ffedd5; --cat-toe-t: #9a3412;
+            --status-done: #dcfce7; --status-done-t: #166534;
+            --tab-active-bg: #eff6ff; --tab-active-t: #3b82f6;
+        }
+        [data-theme="dark"] {
+            --primary: #60a5fa; --bg: #0f172a; --card: #1e293b; --text: #f1f5f9; --subtext: #94a3b8;
+            --border: #334155; --cat-bus: #1e3a8a; --cat-bus-t: #dbeafe; --cat-day: #14532d; --cat-day-t: #dcfce7;
+            --cat-trv: #831843; --cat-trv-t: #fce7f3; --cat-toe: #7c2d12; --cat-toe-t: #ffedd5;
+            --status-done: #064e3b; --status-done-t: #6ee7b7;
+            --tab-active-bg: #1e293b; --tab-active-t: #60a5fa;
+        }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background-color: var(--bg); color: var(--text); margin: 0; display: flex; flex-direction: column; height: 100vh; height: 100dvh; overscroll-behavior: none; -webkit-overflow-scrolling: touch; }
+        header { background-color: var(--card); border-bottom: 1px solid var(--border); padding: 0.8rem; display: flex; justify-content: space-between; align-items: center; padding-top: env(safe-area-inset-top); z-index: 10;}
+        .app-title { font-weight: bold; font-size: 1.1rem; }
+        .theme-toggle { background: none; border: none; font-size: 1.2rem; cursor: pointer; }
+        
+        .bottom-nav { display: flex; background: var(--card); border-top: 1px solid var(--border); padding-bottom: env(safe-area-inset-bottom); box-shadow: 0 -2px 10px rgba(0,0,0,0.05); z-index:10; }
+        .nav-item { flex: 1; padding: 12px; text-align: center; font-size: 0.7rem; color: var(--subtext); cursor: pointer; border-top: 3px solid transparent; }
+        .nav-item.active { color: var(--primary); border-top-color: var(--primary); font-weight: bold; }
+        .nav-icon { display: block; font-size: 1.4rem; margin-bottom: 2px; }
 
-// 古いキャッシュを削除（バージョンアップ用）
-self.addEventListener('activate', (e) => {
-    e.waitUntil(
-        caches.keys().then(keys => Promise.all(
-            keys.map(key => {
-                // 今回のバージョン名と違うキャッシュはすべて削除
-                if (key !== CACHE_NAME) return caches.delete(key);
-            })
-        ))
-    );
-});
+        main { flex: 1; overflow-y: auto; padding: 1rem; max-width: 600px; margin: 0 auto; width: 100%; box-sizing: border-box; }
 
-// オフライン時はキャッシュから表示
-self.addEventListener('fetch', (e) => {
-    e.respondWith(
-        caches.match(e.request).then(response => {
-            return response || fetch(e.request);
-        })
-    );
-});
+        .card { background: var(--card); border-radius: 12px; padding: 1.2rem; margin-bottom: 1rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); border: 1px solid var(--border); }
+        .btn { background-color: var(--primary); color: white; border: none; padding: 12px 16px; border-radius: 8px; font-size: 0.95rem; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 5px; width: 100%; box-sizing: border-box; font-weight: 600; }
+        .btn:active { opacity: 0.9; transform: scale(0.98); }
+        .btn-outline { background: transparent; border: 1px solid var(--primary); color: var(--primary); }
+        .btn-danger-outline { background: transparent; border: 1px solid var(--danger); color: var(--danger); }
+        .btn-success { background-color: var(--success); color: white; }
+        .btn-accent { background-color: var(--accent); color: #fff; }
+
+        .list-item { display: flex; align-items: center; padding: 15px; border-bottom: 1px solid var(--border); cursor: pointer; background: var(--card); margin-bottom: 8px; border-radius: 8px; border: 1px solid var(--border); }
+        .list-content { flex: 1; }
+        .list-summary { font-weight: bold; font-size: 1rem; margin-bottom: 5px; }
+        .list-meta { display: flex; gap: 8px; align-items: center; font-size: 0.8rem; flex-wrap: wrap; }
+        .cat-tag { padding: 2px 8px; border-radius: 10px; font-weight: 600; font-size: 0.75rem; }
+        .level-tag { font-size: 0.7rem; padding: 1px 6px; border: 1px solid var(--border); border-radius: 4px; color: var(--subtext); }
+
+        .lesson-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
+        .lesson-tabs { display: flex; background: var(--bg); padding: 4px; border-radius: 10px; border: 1px solid var(--border); margin-bottom: 15px; }
+        .l-tab { flex: 1; text-align: center; padding: 8px; border-radius: 8px; cursor: pointer; font-weight: 600; color: var(--subtext); transition: 0.2s; font-size: 0.95rem; }
+        .l-tab.active { background: var(--card); color: var(--primary); box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        
+        .text-en { font-size: 1.2rem; line-height: 1.6; margin: 15px 0; white-space: pre-wrap; }
+        .text-jp { color: var(--subtext); font-size: 0.95rem; margin-top: 10px; border-top: 1px dashed var(--border); padding-top: 10px; }
+        .chunk-view { line-height: 2; font-size: 1.1rem; } .chunk-sep { color: var(--subtext); opacity: 0.3; margin: 0 4px; }
+        
+        .pattern-box { text-align: center; padding: 15px; background: var(--bg); border-radius: 8px; margin-bottom: 15px; border: 1px solid var(--border); }
+        .pattern-key { font-size: 1.4rem; font-weight: bold; color: var(--primary); margin-bottom: 5px; }
+        .drill-card { border-top: 1px solid var(--border); padding-top: 15px; margin-top: 15px; }
+        .btn-mic { background: var(--bg); border: 1px solid var(--subtext); color: var(--text); }
+        .btn-mic.listening { background: var(--danger); color: white; border-color: var(--danger); animation: pulse 1.5s infinite; }
+        .score-box { margin-top: 10px; padding: 10px; background: var(--bg); border-radius: 6px; font-size: 0.9rem; }
+        .word-ok { color: var(--success); font-weight: bold; }
+        .word-miss { color: var(--danger); text-decoration: line-through; opacity: 0.6; }
+
+        input[type=range] { flex: 1; margin: 0 10px; }
+        .form-row { display: flex; gap: 10px; margin-bottom: 10px; }
+        .form-col { flex: 1; }
+        label { font-size: 0.75rem; color: var(--subtext); font-weight: bold; display: block; margin-bottom: 3px; }
+        textarea, input[type=text], input[type=number], select { width: 100%; padding: 8px; border-radius: 6px; background: var(--bg); color: var(--text); border: 1px solid var(--border); box-sizing: border-box; }
+        textarea { height: 80px; resize: vertical; }
+
+        .hidden { display: none !important; }
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.6; } 100% { opacity: 1; } }
+
+        /* Modal Styles for Mode 2 */
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 100; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 20px; box-sizing: border-box; color: white; }
+        .modal-box { background: var(--card); color: var(--text); width: 100%; max-width: 500px; border-radius: 16px; padding: 25px; box-sizing: border-box; text-align: center; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
+        .timer-bar-container { width: 100%; height: 8px; background: var(--border); border-radius: 4px; overflow: hidden; margin-top: 15px; margin-bottom: 15px; }
+        .timer-bar { height: 100%; background: var(--danger); width: 100%; transition: width 0.1s linear; }
+        .score-chip { display:inline-block; padding: 4px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; margin-left:5px;}
+        .sc-good { background: var(--status-done); color: var(--status-done-t); }
+        .sc-bad { background: #fee2e2; color: #991b1b; }
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="app-title">Link English v4.0</div>
+    <button class="theme-toggle" onclick="toggleTheme()">🌙</button>
+</header>
+
+<main id="app-content"></main>
+
+<div class="bottom-nav">
+    <div class="nav-item active" id="nav-list" onclick="setMode('list')">
+        <span class="nav-icon">📂</span>List
+    </div>
+    <div class="nav-item" id="nav-test" onclick="startTest()">
+        <span class="nav-icon">🎯</span>Test
+    </div>
+    <div class="nav-item" id="nav-config" onclick="setMode('settings')">
+        <span class="nav-icon">⚙️</span>Config
+    </div>
+</div>
+
+<div id="mode2-modal" class="modal-overlay hidden">
+    <div class="modal-box" id="mode2-content">
+        </div>
+</div>
+
+<script>
+// --- CORE DATA ---
+const manifest = { "name": "Link English", "short_name": "LinkEng", "start_url": ".", "display": "standalone", "background_color": "#f8fafc", "theme_color": "#3b82f6", "icons": [{ "src": "data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🦉</text></svg>", "sizes": "512x512", "type": "image/svg+xml" }] };
+document.getElementById('my-manifest').setAttribute('href', 'data:application/manifest+json;charset=utf-8,' + encodeURIComponent(JSON.stringify(manifest)));
+
+let state = { 
+    data: [], currentIndex: 0, mode: 'list', lessonTab: 'commute',
+    theme: 'light', showText: false, selectedVoiceIndex: -1, voiceRate: 1.0, 
+    isLooping: false, promptTopic: "Business", promptLevel: "Intermediate", promptQty: 3,
+    testQueue: [], testIndex: 0 
+};
+let voices = [], loopInterval = null, recognition = null;
+let audioCtx = null;
+
+// Mode 2 State
+let m2 = { queue: [], currentIndex: 0, timerId: null, timeLeft: 10, isRecording: false, currentTarget: "", currentStatsId: null };
+
+function init() {
+    const savedData = localStorage.getItem('le_data');
+    state.data = savedData ? JSON.parse(savedData) : [];
+    // Initialize progress and stats objects if missing
+    state.data.forEach(d => { 
+        if(!d.progress) d.progress = {listen:false, speak:false}; 
+        if(!d.commute_content.stats) d.commute_content.stats = { last_score: null, result: null };
+        if(d.home_content.drills) {
+            d.home_content.drills.forEach(drill => { if(!drill.stats) drill.stats = { last_score: null, result: null }; });
+        }
+    });
+    
+    const restore = (k, t) => { const v = localStorage.getItem(k); if(v) state[t] = (t==='theme' || t==='selectedVoiceIndex') ? v : parseFloat(v); };
+    restore('le_theme', 'theme'); restore('le_voice_index', 'selectedVoiceIndex'); restore('le_voice_rate', 'voiceRate');
+    
+    if (state.theme === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+    if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        recognition = new SpeechRecognition(); 
+        recognition.lang = 'en-US';
+        recognition.interimResults = false;
+        recognition.continuous = false;
+    }
+    window.speechSynthesis.onvoiceschanged = loadVoices; loadVoices(); 
+    render();
+}
+
+function loadVoices() {
+    voices = window.speechSynthesis.getVoices(); 
+    if (state.selectedVoiceIndex === -1 && voices.length) {
+        let idx = voices.findIndex(v => v.lang === "en-US");
+        if (idx !== -1) state.selectedVoiceIndex = idx;
+    }
+}
+
+function playBeep() {
+    if(!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if(audioCtx.state === 'suspended') audioCtx.resume();
+    const osc = audioCtx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(880, audioCtx.currentTime); // A5 note
+    osc.connect(audioCtx.destination);
+    osc.start();
+    osc.stop(audioCtx.currentTime + 0.15);
+}
+
+// --- NAVIGATION ---
+function setMode(m) { state.mode = m; stopAudio(); render(); }
+function openLesson(i) { state.currentIndex = i; state.mode = 'lesson'; state.lessonTab = 'commute'; state.showText = false; stopAudio(); render(); }
+function setLessonTab(t) { state.lessonTab = t; stopAudio(); render(); }
+function toggleTheme() { state.theme = state.theme === 'light' ? 'dark' : 'light'; document.documentElement.setAttribute('data-theme', state.theme); localStorage.setItem('le_theme', state.theme); render(); }
+function toggleProgress(type) { state.data[state.currentIndex].progress[type] = !state.data[state.currentIndex].progress[type]; saveData(); render(); }
+function saveData() { localStorage.setItem('le_data', JSON.stringify(state.data)); }
+
+// --- AUDIO & SPEECH ---
+function speak(txt) { 
+    window.speechSynthesis.cancel(); 
+    const u = new SpeechSynthesisUtterance(txt); u.lang = 'en-US'; 
+    if (voices[state.selectedVoiceIndex]) u.voice = voices[state.selectedVoiceIndex]; 
+    u.rate = state.voiceRate; window.speechSynthesis.speak(u); 
+}
+function stopAudio() { state.isLooping = false; clearInterval(loopInterval); window.speechSynthesis.cancel(); render(); }
+function toggleLoop() { 
+    if (state.isLooping) stopAudio(); 
+    else { 
+        state.isLooping = true; render(); speak(state.data[state.currentIndex].commute_content.english_text); 
+        loopInterval = setInterval(() => { if (!window.speechSynthesis.speaking) speak(state.data[state.currentIndex].commute_content.english_text); }, 3000); 
+    } 
+}
+
+// Mode 1: Self Evaluation Save
+function saveSelfEval(type, index, resultStr) {
+    const d = state.data[state.currentIndex];
+    let targetStats = (type === 'commute') ? d.commute_content.stats : d.home_content.drills[index].stats;
+    targetStats.result = resultStr; // 'good', 'nogood', 'retry'
+    saveData();
+    render();
+}
+
+function analyzeSpeech(target, input) {
+    const clean = (s) => s.toLowerCase().replace(/[.,?!]/g, "").split(/\s+/).filter(x => x.length > 0);
+    const tWords = clean(target), iWords = clean(input);
+    let html = "", matched = 0;
+    tWords.forEach(w => {
+        if (iWords.includes(w)) { html += `<span class="word-ok">${w}</span> `; matched++; iWords.splice(iWords.indexOf(w), 1); }
+        else html += `<span class="word-miss">${w}</span> `;
+    });
+    const score = tWords.length === 0 ? 0 : Math.round((matched / tWords.length) * 100);
+    return { score, html: `<div style="font-weight:bold; color:${score===100?'var(--success)':'var(--danger)'}">Score: ${score}%</div>${html}` };
+}
+
+// --- RENDERING ---
+// --- RENDERING ---
+function render() {
+    const app = document.getElementById('app-content');
+    const nav = document.querySelector('.bottom-nav');
+    
+    // ★ここを修正: 常に 'flex' にして下部ナビゲーションを隠さない！
+    nav.style.display = 'flex';
+    
+    document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+    
+    if (state.mode === 'list') { 
+        document.getElementById('nav-list').classList.add('active'); 
+        renderList(app); 
+    }
+    else if (state.mode === 'settings') { 
+        document.getElementById('nav-config').classList.add('active'); 
+        renderSettings(app); 
+    }
+    else if (state.mode === 'lesson') { 
+        // レッスン中も「List」をアクティブ状態にしておく
+        document.getElementById('nav-list').classList.add('active'); 
+        renderLesson(app); 
+    }
+    else if (state.mode === 'test') { 
+        document.getElementById('nav-test').classList.add('active'); 
+        renderTest(app); 
+    }
+}
+
+function renderList(c) {
+    if (state.data.length === 0) { c.innerHTML = '<div style="text-align:center;padding:40px;color:var(--subtext)">No lessons.<br>Add some in Config!</div>'; return; }
+    c.innerHTML = state.data.map((d, i) => `
+        <div class="list-item" onclick="openLesson(${i})">
+            <div class="list-content">
+                <div class="list-summary">${d.commute_content.summary}</div>
+                <div class="list-meta">
+                    <span class="cat-tag cat-${d.category}">${d.category}</span>
+                    <span class="level-tag">${d.level}</span>
+                </div>
+            </div>
+            <span>›</span>
+        </div>`).join('');
+}
+
+function renderLesson(c) {
+    const d = state.data[state.currentIndex];
+    const isListen = state.lessonTab === 'commute';
+    c.innerHTML = `
+    <div class="lesson-header"><button class="btn-outline" onclick="setMode('list')" style="width:auto;padding:5px 10px;">← Back</button><div style="font-weight:bold">${d.commute_content.summary}</div><div style="width:50px"></div></div>
+    <div class="lesson-tabs"><div class="l-tab ${isListen?'active':''}" onclick="setLessonTab('commute')">🎧 Commute</div><div class="l-tab ${!isListen?'active':''}" onclick="setLessonTab('practice')">🗣️ Practice</div></div>
+    <div class="card" style="padding:10px;">
+        ${isListen ? renderListenContent(d) : renderSpeakContent(d)}
+    </div>
+    <div style="display:flex;justify-content:space-between;margin-top:20px">
+        <button class="btn-outline" style="width:45%" onclick="if(state.currentIndex>0) openLesson(state.currentIndex-1)" ${state.currentIndex===0?'disabled':''}>← Prev</button>
+        <button class="btn-outline" style="width:45%" onclick="if(state.currentIndex<state.data.length-1) openLesson(state.currentIndex+1)" ${state.currentIndex===state.data.length-1?'disabled':''}>Next →</button>
+    </div>`;
+}
+
+function renderListenContent(d) {
+    return `
+    <div style="margin-top:5px; display:flex; gap:10px;"><button class="btn" onclick="speak(state.data[state.currentIndex].commute_content.english_text)">▶️ Play</button><button class="btn ${state.isLooping?'btn-accent':'btn-outline'}" onclick="toggleLoop()">${state.isLooping?'🔁 Stop':'🔁 Loop'}</button></div>
+    <div id="txt-area" class="${state.showText?'':'hidden'}">
+        <div class="text-en">${d.commute_content.english_text}</div>
+        <div class="text-jp">${d.commute_content.japanese_translation}</div>
+        <div class="chunk-view" style="margin-top:10px; border-top:1px dashed var(--border); padding-top:10px;">
+            ${d.commute_content.chunks.split('/').map(c=>`<span>${c}</span><span class="chunk-sep">/</span>`).join('')}
+        </div>
+    </div>
+    <button class="btn-outline" style="margin-top:15px;" onclick="state.showText=!state.showText;render()">${state.showText?'🙈 Hide':'👁️ Show'} Text</button>`;
+}
+
+function renderSpeakContent(d) {
+    const safeEng = (t) => t.replace(/'/g, "\\'");
+    
+    // Combine Commute + Drills for Practice
+    let items = [
+        { type: 'commute', jp: d.commute_content.japanese_translation, en: d.commute_content.english_text, stats: d.commute_content.stats, idx: -1 }
+    ];
+    d.home_content.drills.forEach((drill, i) => {
+        items.push({ type: 'drill', jp: drill.japanese, en: drill.english, stats: drill.stats, idx: i });
+    });
+
+    let html = `
+    <button class="btn btn-danger-outline" style="width:100%; margin-bottom:15px; font-weight:bold; border-width:2px;" onclick="initMode2()">🔥 Mode 2: Tension (Start)</button>
+    <div style="font-size:0.8rem; color:var(--subtext); text-align:center; margin-bottom:15px;">Mode 1: My Pace (Self Eval)</div>
+    `;
+
+    items.forEach((item, i) => {
+        let badge = "";
+        if(item.stats.result === 'good') badge = `<span class="score-chip sc-good">✅ Good</span>`;
+        if(item.stats.result === 'nogood') badge = `<span class="score-chip sc-bad">❌ No Good</span>`;
+        if(item.stats.result === 'retry') badge = `<span class="score-chip" style="background:var(--accent);color:white;">🔄 Retry</span>`;
+
+        html += `
+        <div class="drill-card" style="margin-top:10px; padding-top:10px; border-top:1px solid var(--border);">
+            <div style="font-weight:bold; font-size:0.9rem; margin-bottom:8px;">${i+1}. ${item.jp} ${badge}</div>
+            <div style="display:flex; gap:10px; margin-bottom:10px;">
+                <button class="btn btn-outline" style="flex:1" onclick="document.getElementById('m1-ans-${i}').classList.remove('hidden')">👁️ Show Answer</button>
+                <button class="btn btn-accent" onclick="speak('${safeEng(item.en)}')" style="width:50px; padding:0;">🔊</button>
+            </div>
+            
+            <div id="m1-ans-${i}" class="hidden" style="margin-top:8px;">
+                <div style="color:var(--primary); font-weight:bold; font-size:1.1rem; margin-bottom:10px;">${item.en}</div>
+                <div style="display:flex; gap:5px;">
+                    <button class="btn btn-success" style="padding:6px; font-size:0.8rem;" onclick="saveSelfEval('${item.type}', ${item.idx}, 'good')">🟢 Good</button>
+                    <button class="btn btn-accent" style="padding:6px; font-size:0.8rem;" onclick="saveSelfEval('${item.type}', ${item.idx}, 'retry')">🟡 Retry</button>
+                    <button class="btn btn-danger-outline" style="padding:6px; font-size:0.8rem;" onclick="saveSelfEval('${item.type}', ${item.idx}, 'nogood')">🔴 No Good</button>
+                </div>
+            </div>
+        </div>`;
+    });
+    return html;
+}
+
+// ==========================================
+// MODE 2: TENSION MODE LOGIC (The Core Update)
+// ==========================================
+function initMode2() {
+    if(!recognition) return alert("Speech Recognition not supported on this browser.");
+    
+    const d = state.data[state.currentIndex];
+    m2.queue = [
+        { type: 'commute', jp: d.commute_content.japanese_translation, en: d.commute_content.english_text, obj: d.commute_content }
+    ];
+    d.home_content.drills.forEach(drill => {
+        m2.queue.push({ type: 'drill', jp: drill.japanese, en: drill.english, obj: drill });
+    });
+    
+    // Shuffle queue
+    m2.queue.sort(() => Math.random() - 0.5);
+    m2.currentIndex = 0;
+    
+    const modal = document.getElementById('mode2-modal');
+    modal.classList.remove('hidden');
+    
+    document.getElementById('mode2-content').innerHTML = `
+        <h2 style="margin-top:0;">🔥 Tension Mode</h2>
+        <p style="font-size:0.9rem; color:var(--subtext);">6 questions. Random order. 10 sec limit.<br>Speak immediately after the BEEP.</p>
+        <button class="btn btn-danger-outline" style="margin-top:20px; font-size:1.2rem; border-width:2px; font-weight:bold;" onclick="startMode2Item()">Are you ready? [OK]</button>
+        <br><button class="btn btn-outline" style="margin-top:15px; border:none;" onclick="closeMode2()">Cancel</button>
+    `;
+}
+
+function closeMode2() {
+    if(m2.isRecording) recognition.stop();
+    clearTimeout(m2.timerId);
+    document.getElementById('mode2-modal').classList.add('hidden');
+    render(); // refresh UI to show updated badges
+}
+
+function startMode2Item() {
+    if(m2.currentIndex >= m2.queue.length) {
+        document.getElementById('mode2-content').innerHTML = `
+            <h2>🎉 Complete!</h2>
+            <p>You survived Mode 2!</p>
+            <button class="btn" onclick="closeMode2()">Close & Review</button>
+        `;
+        return;
+    }
+
+    const item = m2.queue[m2.currentIndex];
+    m2.currentTarget = item.en;
+    m2.currentStatsObj = item.obj;
+    m2.timeLeft = 10;
+    
+    document.getElementById('mode2-content').innerHTML = `
+        <div style="font-weight:bold; color:var(--danger); margin-bottom:10px;">Question ${m2.currentIndex + 1} / ${m2.queue.length}</div>
+        <div style="font-size:1.3rem; font-weight:bold; margin-bottom:10px;">${item.jp}</div>
+        <div style="font-size:2rem;">🎙️</div>
+        <div class="timer-bar-container"><div class="timer-bar" id="m2-timer-bar"></div></div>
+        <div id="m2-status" style="font-size:0.8rem; color:var(--danger); font-weight:bold;">Listening...</div>
+    `;
+
+    playBeep();
+    
+    // Slight delay to ensure Beep finishes before Mic starts (avoids mic picking up beep)
+    setTimeout(() => {
+        try { recognition.start(); m2.isRecording = true; } catch(e){}
+        
+        m2.timerId = setInterval(() => {
+            m2.timeLeft -= 0.1;
+            let pct = (m2.timeLeft / 10) * 100;
+            const bar = document.getElementById('m2-timer-bar');
+            if(bar) bar.style.width = `${pct}%`;
+
+            if (m2.timeLeft <= 0) {
+                clearInterval(m2.timerId);
+                if(m2.isRecording) recognition.stop(); // Force stop triggers onend or onresult
+                handleMode2Result(""); // Force Timeout result
+            }
+        }, 100);
+    }, 200);
+
+    recognition.onresult = (e) => {
+        clearInterval(m2.timerId);
+        m2.isRecording = false;
+        const transcript = e.results[0][0].transcript;
+        handleMode2Result(transcript);
+    };
+
+    recognition.onerror = (e) => {
+        if(e.error === 'no-speech') {
+            clearInterval(m2.timerId);
+            handleMode2Result(""); // Treat as timeout/silence
+        }
+    }
+    
+    recognition.onend = () => {
+        m2.isRecording = false;
+    }
+}
+
+function handleMode2Result(input) {
+    clearInterval(m2.timerId);
+    if(m2.isRecording) { recognition.stop(); m2.isRecording = false; }
+
+    const isTimeout = (input.trim() === "");
+    let feedback = "";
+    let score = 0;
+
+    if (isTimeout) {
+        feedback = `<div style="color:var(--danger); font-weight:bold; font-size:1.2rem; margin-bottom:10px;">⏱️ Time Out / Silence</div>`;
+        m2.currentStatsObj.stats.result = 'nogood';
+        m2.currentStatsObj.stats.last_score = 0;
+    } else {
+        const analysis = analyzeSpeech(m2.currentTarget, input);
+        score = analysis.score;
+        feedback = analysis.html;
+        
+        // Strict Evaluation
+        if(score === 100) m2.currentStatsObj.stats.result = 'good';
+        else if(score >= 80) m2.currentStatsObj.stats.result = 'retry';
+        else m2.currentStatsObj.stats.result = 'nogood';
+        m2.currentStatsObj.stats.last_score = score;
+    }
+    saveData();
+
+    document.getElementById('mode2-content').innerHTML = `
+        <div style="font-weight:bold; color:var(--subtext); margin-bottom:5px;">Result (${m2.currentIndex + 1}/${m2.queue.length})</div>
+        ${feedback}
+        <div style="margin-top:15px; padding:10px; background:var(--bg); border-radius:8px; border:1px solid var(--border);">
+            <div style="font-size:0.8rem; color:var(--subtext);">Target:</div>
+            <div style="font-weight:bold; color:var(--primary); font-size:1.1rem;">${m2.currentTarget}</div>
+        </div>
+        <div style="display:flex; gap:10px; margin-top:20px;">
+            <button class="btn btn-outline" style="flex:1" onclick="closeMode2()">Stop</button>
+            <button class="btn btn-danger-outline" style="flex:2; font-weight:bold;" onclick="m2.currentIndex++; startMode2Item()">Next ➔</button>
+        </div>
+    `;
+}
+
+// --- SETTINGS (Prompt Builder modified to 5 drills) ---
+function updatePrompt() {
+    const topic = document.getElementById('p-topic')?.value || "Business";
+    const level = document.getElementById('p-level')?.value || "Intermediate";
+    // Fixed Qty to 5 for v4.0 design
+    
+    const p = `あなたは英語教材作成のプロです。以下の仕様で学習データを作成してください。
+## 生成モード
+テーマ: ${topic}
+レベル: ${level}
+作成数: メイン例文1つ ＋ 関連ドリル5つ
+自然な表現で作成してください。
+
+## 【絶対遵守ルール】
+1. 出力は以下のJSON配列形式のみ。
+2. english_text と chunks の連結結果は完全一致させること。
+3. "drills" 配列の中身は必ず5個作成すること。
+\`\`\`json
+[
+  {
+    "id": "gen_${Date.now()}", 
+    "category": "${topic}",
+    "level": "${level}",
+    "progress": { "listen": false, "speak": false },
+    "commute_content": { 
+      "english_text": "...", "japanese_translation": "...", "chunks": "... / ...", "summary": "...", "vocabulary": [] 
+    },
+    "home_content": { 
+      "pattern_focus": "...", "pattern_explanation": "...", 
+      "drills": [
+        {"japanese": "...", "english": "..."},
+        {"japanese": "...", "english": "..."},
+        {"japanese": "...", "english": "..."},
+        {"japanese": "...", "english": "..."},
+        {"japanese": "...", "english": "..."}
+      ] 
+    }
+  }
+]
+\`\`\``;
+    const area = document.getElementById('p-area');
+    if (area) area.value = p;
+}
+
+function copyPrompt() { updatePrompt(); navigator.clipboard.writeText(document.getElementById('p-area').value).then(() => alert('Copied!')); }
+function loadJsonData() { 
+    try { 
+        const d = JSON.parse(document.getElementById('data-input').value); 
+        if (Array.isArray(d)) { 
+            if (confirm('Add to existing?')) state.data = [...state.data, ...d]; else state.data = d; 
+            init(); // Re-init to attach stats objects
+            saveData(); setMode('list'); 
+        }
+    } catch(e) { alert('Invalid JSON'); } 
+}
+
+function renderSettings(c) {
+    const voiceOpts = voices.map((v,i)=>`<option value="${i}" ${i==state.selectedVoiceIndex?'selected':''}>${v.name}</option>`).join('');
+    c.innerHTML = `
+    <div class="card">
+        <h2>🤖 AI Prompt Builder v4.0</h2>
+        <label>Topic</label>
+        <input type="text" id="p-topic" value="${state.promptTopic}" oninput="updatePrompt()">
+        <div class="form-row" style="margin-top:10px;">
+            <div class="form-col"><label>Level</label><select id="p-level" onchange="updatePrompt()"><option>Intermediate</option><option>Advanced</option><option>Beginner</option></select></div>
+        </div>
+        <textarea id="p-area" style="font-size:0.6rem; height:120px; margin-top:15px;" readonly></textarea>
+        <button class="btn btn-outline" onclick="copyPrompt()">📋 Copy Prompt</button>
+    </div>
+    <div class="card">
+        <h2>Data & Voice</h2>
+        <textarea id="data-input" placeholder="Paste JSON from Gemini here..."></textarea>
+        <button class="btn" onclick="loadJsonData()" style="margin-top:10px;">Load Data</button>
+        <div style="margin-top:20px;"><label>Voice</label><select onchange="state.selectedVoiceIndex=this.value;localStorage.setItem('le_voice_index',this.value)">${voiceOpts}</select></div>
+        <button class="btn-outline" onclick="localStorage.removeItem('le_data'); location.reload();" style="margin-top:20px; border-color:var(--danger); color:var(--danger);">⚠️ Reset All Data</button>
+    </div>`;
+    setTimeout(updatePrompt, 50);
+}
+
+// Disable old startTest temporarily until smart-test is implemented next
+function startTest() {
+    alert("Test Mode is being upgraded to Smart Test in the next version. Use 'Tension Mode' inside Practice for now!");
+}
+
+init();
+</script>
+</body>
+</html>
