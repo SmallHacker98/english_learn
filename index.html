@@ -144,11 +144,17 @@ function init() {
     const savedData = localStorage.getItem('le_data');
     state.data = savedData ? JSON.parse(savedData) : [];
     
+    const patchStats = (item) => {
+        if (!item.stats) item.stats = { last_score: null, result: null, interval: 0, next_review: 0 };
+        if (item.stats.interval === undefined) item.stats.interval = 0;
+        if (item.stats.next_review === undefined) item.stats.next_review = 0;
+    };
+
     state.data.forEach(d => { 
         if(!d.progress) d.progress = {listen:false, speak:false}; 
-        if(!d.commute_content.stats) d.commute_content.stats = { last_score: null, result: null };
+        patchStats(d.commute_content);
         if(d.home_content.drills) {
-            d.home_content.drills.forEach(drill => { if(!drill.stats) drill.stats = { last_score: null, result: null }; });
+            d.home_content.drills.forEach(patchStats);
         }
     });
     
@@ -225,15 +231,42 @@ function toggleLoop() {
     } 
 }
 
+    // --- 記憶定着（SRS）計算エンジン ---
+function updateSRS(statsObj, resultStr, score) {
+    const now = Date.now();
+    const DAY = 24 * 60 * 60 * 1000; // 1日のミリ秒
+    
+    // 過去のインターバルを取得（初回は0）
+    let currentInterval = statsObj.interval || 0;
+    
+    if (resultStr === 'good') {
+        // 完璧なら出題間隔を倍増（0なら1日へ）
+        statsObj.interval = currentInterval === 0 ? 1 : currentInterval * 2;
+    } else if (resultStr === 'retry') {
+        // 微妙なら明日もう一度
+        statsObj.interval = 1;
+    } else { 
+        // ダメなら期間リセット（即座に復習対象）
+        statsObj.interval = 0;
+    }
+    
+    // 次回の復習予定日時をセット
+    statsObj.next_review = now + (statsObj.interval * DAY);
+    statsObj.result = resultStr;
+    if (score !== undefined) statsObj.last_score = score;
+}
+
 // Mode 1: Self Evaluation Save
 function saveSelfEval(type, index, resultStr) {
     const d = state.data[state.currentIndex];
     let targetStats = (type === 'commute') ? d.commute_content.stats : d.home_content.drills[index].stats;
-    targetStats.result = resultStr; // 'good', 'nogood', 'retry'
+    
+    // ★ただ記録するだけでなく、SRSエンジンに通す
+    updateSRS(targetStats, resultStr);
+    
     saveData();
     render();
 }
-
 function analyzeSpeech(target, input) {
     const clean = (s) => s.toLowerCase().replace(/[.,?!]/g, "").split(/\s+/).filter(x => x.length > 0);
     const tWords = clean(target), iWords = clean(input);
@@ -614,22 +647,23 @@ function handleMode2Result(input) {
     const isTimeout = (input.trim() === "");
     let feedback = "";
     let score = 0;
+    let resStr = 'nogood'; // デフォルトはnogood（不正解）
 
     if (isTimeout) {
         feedback = `<div style="color:var(--danger); font-weight:bold; font-size:1.2rem; margin-bottom:10px;">⏱️ Time Out / Silence</div>`;
-        m2.currentStatsObj.stats.result = 'nogood';
-        m2.currentStatsObj.stats.last_score = 0;
+        score = 0;
     } else {
         const analysis = analyzeSpeech(m2.currentTarget, input);
         score = analysis.score;
         feedback = analysis.html;
         
         // Strict Evaluation
-        if(score === 100) m2.currentStatsObj.stats.result = 'good';
-        else if(score >= 80) m2.currentStatsObj.stats.result = 'retry';
-        else m2.currentStatsObj.stats.result = 'nogood';
-        m2.currentStatsObj.stats.last_score = score;
+        if(score === 100) resStr = 'good';
+        else if(score >= 80) resStr = 'retry';
     }
+    
+    // ★修正：タイムアウトでも音声入力ありでも、必ずSRSエンジンを通す！
+    updateSRS(m2.currentStatsObj.stats, resStr, score);
     saveData();
 
     document.getElementById('mode2-content').innerHTML = `
@@ -761,8 +795,55 @@ function renderSettings(c) {
 }
 
 // Disable old startTest temporarily until smart-test is implemented next
+// --- SMART TEST MODE ---
 function startTest() {
-    alert("Test Mode is being upgraded to Smart Test in the next version. Use 'Tension Mode' inside Practice for now!");
+    let dueItems = [];
+    const now = Date.now();
+    
+    // 全レッスンから「未テスト」または「復習時期を過ぎた」フレーズを抽出
+    state.data.forEach((d) => {
+        const check = (obj, jp, en) => {
+            let st = obj.stats;
+            if (!st.result || st.next_review <= now) {
+                // 優先度：昔にテストしたものほど優先。未テスト(0)は最優先。
+                let priority = st.next_review || 0; 
+                dueItems.push({ obj: obj, jp: jp, en: en, priority: priority });
+            }
+        };
+        check(d.commute_content, d.commute_content.japanese_translation, d.commute_content.english_text);
+        d.home_content.drills.forEach(drill => check(drill, drill.japanese, drill.english));
+    });
+    
+    if (dueItems.length === 0) {
+        alert("🎉 今のところ復習が必要なフレーズはありません！完璧です！");
+        setMode('list');
+        return;
+    }
+    
+    // 優先度（古い順）に並び替え
+    dueItems.sort((a, b) => a.priority - b.priority);
+    
+    // 疲れないように最大10問に絞り、実際に出題する時はランダムシャッフル
+    let testQueue = dueItems.slice(0, 10).sort(() => Math.random() - 0.5);
+    
+    m2.queue = testQueue.map(item => ({ type: 'test', jp: item.jp, en: item.en, obj: item.obj }));
+    m2.currentIndex = 0;
+    m2.isTestMode = true; // テストとモード2を判別するフラグ（おまけ）
+    
+    const modal = document.getElementById('mode2-modal');
+    modal.classList.remove('hidden');
+    
+    document.getElementById('mode2-content').innerHTML = `
+        <h2 style="margin-top:0;">🎯 Smart Test</h2>
+        <p style="font-size:0.9rem; color:var(--subtext);">弱点と忘却曲線に基づく <b>${m2.queue.length}問</b> のテストです。<br>10秒以内に回答してください。</p>
+        <button class="btn btn-success" style="margin-top:20px; font-size:1.2rem; border-width:2px; font-weight:bold;" onclick="startMode2Item()">Start Test [OK]</button>
+        <br><button class="btn btn-outline" style="margin-top:15px; border:none;" onclick="closeMode2()">Cancel</button>
+    `;
+    
+    // UI上のタブをテストに切り替え
+    document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+    document.getElementById('nav-test').classList.add('active');
+    state.mode = 'test';
 }
 
 init();
