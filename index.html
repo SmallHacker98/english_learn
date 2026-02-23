@@ -136,10 +136,11 @@ let audioCtx = null;
 // Mode 2 State
 let m2 = { queue: [], currentIndex: 0, timerId: null, timeLeft: 10, isRecording: false, currentTarget: "", currentStatsId: null };
 
+// --- INITIALIZATION ---
 function init() {
     const savedData = localStorage.getItem('le_data');
     state.data = savedData ? JSON.parse(savedData) : [];
-    // Initialize progress and stats objects if missing
+    
     state.data.forEach(d => { 
         if(!d.progress) d.progress = {listen:false, speak:false}; 
         if(!d.commute_content.stats) d.commute_content.stats = { last_score: null, result: null };
@@ -152,6 +153,20 @@ function init() {
     restore('le_theme', 'theme'); restore('le_voice_index', 'selectedVoiceIndex'); restore('le_voice_rate', 'voiceRate');
     
     if (state.theme === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+    
+    // 🎤 【新規追加】起動時にマイクの事前許可を取得する
+    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        navigator.mediaDevices.getUserMedia({ audio: true })
+            .then(stream => {
+                // 許可をもらったら、録音はまだしないので即座にトラックを閉じる
+                stream.getTracks().forEach(track => track.stop());
+                console.log("マイクの事前許可を取得しました");
+            })
+            .catch(err => {
+                console.warn("マイクの事前許可がブロックされたか、拒否されました:", err);
+            });
+    }
+
     if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         recognition = new SpeechRecognition(); 
@@ -159,6 +174,7 @@ function init() {
         recognition.interimResults = false;
         recognition.continuous = false;
     }
+    
     window.speechSynthesis.onvoiceschanged = loadVoices; loadVoices(); 
     render();
 }
@@ -303,7 +319,7 @@ function renderListenContent(d) {
 function renderSpeakContent(d) {
     const safeEng = (t) => t.replace(/'/g, "\\'");
     
-    // Combine Commute + Drills for Practice
+    // Commute例文とDrillをまとめる
     let items = [
         { type: 'commute', jp: d.commute_content.japanese_translation, en: d.commute_content.english_text, stats: d.commute_content.stats, idx: -1 }
     ];
@@ -318,17 +334,21 @@ function renderSpeakContent(d) {
 
     items.forEach((item, i) => {
         let badge = "";
-        if(item.stats.result === 'good') badge = `<span class="score-chip sc-good">✅ Good</span>`;
-        if(item.stats.result === 'nogood') badge = `<span class="score-chip sc-bad">❌ No Good</span>`;
-        if(item.stats.result === 'retry') badge = `<span class="score-chip" style="background:var(--accent);color:white;">🔄 Retry</span>`;
+        if(item.stats && item.stats.result === 'good') badge = `<span class="score-chip sc-good">✅ Good</span>`;
+        if(item.stats && item.stats.result === 'nogood') badge = `<span class="score-chip sc-bad">❌ No Good</span>`;
+        if(item.stats && item.stats.result === 'retry') badge = `<span class="score-chip" style="background:var(--accent);color:white;">🔄 Retry</span>`;
 
         html += `
         <div class="drill-card" style="margin-top:10px; padding-top:10px; border-top:1px solid var(--border);">
             <div style="font-weight:bold; font-size:0.9rem; margin-bottom:8px;">${i+1}. ${item.jp} ${badge}</div>
+            
             <div style="display:flex; gap:10px; margin-bottom:10px;">
-                <button class="btn btn-outline" style="flex:1" onclick="document.getElementById('m1-ans-${i}').classList.remove('hidden')">👁️ Show Answer</button>
+                <button class="btn btn-mic" id="btn-m1-mic-${i}" onclick="startDictation('${safeEng(item.en)}', 'm1-res-${i}', 'btn-m1-mic-${i}')" style="flex:1">🎙️ Speak</button>
+                <button class="btn btn-outline" style="flex:1" onclick="document.getElementById('m1-ans-${i}').classList.remove('hidden')">👁️ Answer</button>
                 <button class="btn btn-accent" onclick="speak('${safeEng(item.en)}')" style="width:50px; padding:0;">🔊</button>
             </div>
+            
+            <div id="m1-res-${i}" class="hidden score-box"></div>
             
             <div id="m1-ans-${i}" class="hidden" style="margin-top:8px;">
                 <div style="color:var(--primary); font-weight:bold; font-size:1.1rem; margin-bottom:10px;">${item.en}</div>
