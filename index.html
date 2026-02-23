@@ -91,6 +91,22 @@
         .score-chip { display:inline-block; padding: 4px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; margin-left:5px;}
         .sc-good { background: var(--status-done); color: var(--status-done-t); }
         .sc-bad { background: #fee2e2; color: #991b1b; }
+        /* 💡 追加：通知バッジのデザイン */
+        .nav-badge {
+            position: absolute;
+            top: 4px;
+            right: calc(50% - 22px);
+            background: var(--danger);
+            color: white;
+            font-size: 0.65rem;
+            font-weight: bold;
+            padding: 2px 6px;
+            border-radius: 10px;
+            border: 2px solid var(--card);
+            line-height: 1;
+            z-index: 20;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
     </style>
 </head>
 <body>
@@ -106,8 +122,9 @@
     <div class="nav-item active" id="nav-list" onclick="setMode('list')">
         <span class="nav-icon">📂</span>List
     </div>
-    <div class="nav-item" id="nav-test" onclick="startTest()">
+    <div class="nav-item" id="nav-test" style="position:relative;" onclick="startTest()">
         <span class="nav-icon">🎯</span>Test
+        <span id="test-badge" class="nav-badge hidden">0</span>
     </div>
     <div class="nav-item" id="nav-stats" onclick="setMode('stats')">
         <span class="nav-icon">📊</span>Stats
@@ -338,6 +355,8 @@ function render() {
     else if (state.mode === 'test') { document.getElementById('nav-test').classList.add('active'); renderTest(app); }
     // 💡 Statsモードの切り替えを追加
     else if (state.mode === 'stats') { document.getElementById('nav-stats').classList.add('active'); renderStats(app); }
+
+    updateTestBadge();
 }
 
     function renderStats(c) {
@@ -798,6 +817,32 @@ function renderSettings(c) {
     setTimeout(updatePrompt, 50);
 }
 
+// --- バッジ更新機能 ---
+function updateTestBadge() {
+    let count = 0;
+    const now = Date.now();
+    
+    // 全データから「テスト条件（Mode2済 ＆ 復習時期到達）」を満たす数を数える
+    state.data.forEach((d) => {
+        const check = (st) => {
+            if (st && st.tested_in_m2 && st.next_review <= now) count++;
+        };
+        if (d.commute_content.stats) check(d.commute_content.stats);
+        if (d.home_content.drills) d.home_content.drills.forEach(drill => check(drill.stats));
+    });
+
+    // バッジの表示・非表示を切り替え
+    const badge = document.getElementById('test-badge');
+    if (badge) {
+        if (count > 0) {
+            badge.innerText = count;
+            badge.classList.remove('hidden');
+        } else {
+            badge.classList.add('hidden');
+        }
+    }
+}
+    
 // Disable old startTest temporarily until smart-test is implemented next
 // --- SMART TEST MODE ---
 // --- SMART TEST MODE ---
