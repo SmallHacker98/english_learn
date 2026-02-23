@@ -484,19 +484,19 @@ function handleMode2Result(input) {
 function updatePrompt() {
     const topic = document.getElementById('p-topic')?.value || "Business";
     const level = document.getElementById('p-level')?.value || "Intermediate";
-    // Fixed Qty to 5 for v4.0 design
-    
+    const qty = document.getElementById('p-qty')?.value || 3; // ← レッスン自体の作成数（元通り）
+
     const p = `あなたは英語教材作成のプロです。以下の仕様で学習データを作成してください。
 ## 生成モード
 テーマ: ${topic}
 レベル: ${level}
-作成数: メイン例文1つ ＋ 関連ドリル5つ
+作成数: ${qty}セット（1セットにつき、メイン例文1つ＋関連ドリル5つ）
 自然な表現で作成してください。
 
 ## 【絶対遵守ルール】
 1. 出力は以下のJSON配列形式のみ。
 2. english_text と chunks の連結結果は完全一致させること。
-3. "drills" 配列の中身は必ず5個作成すること。
+3. 各セットの "drills" 配列の中身は必ず5個作成すること。
 \`\`\`json
 [
   {
@@ -517,7 +517,7 @@ function updatePrompt() {
         {"japanese": "...", "english": "..."}
       ] 
     }
-  }
+  } // ← これを指定された ${qty} セット分繰り返す
 ]
 \`\`\``;
     const area = document.getElementById('p-area');
