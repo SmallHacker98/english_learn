@@ -349,7 +349,21 @@ function renderLesson(c) {
 
 function renderListenContent(d) {
     return `
-    <div style="margin-top:5px; display:flex; gap:10px;"><button class="btn" onclick="speak(state.data[state.currentIndex].commute_content.english_text)">▶️ Play</button><button class="btn ${state.isLooping?'btn-accent':'btn-outline'}" onclick="toggleLoop()">${state.isLooping?'🔁 Stop':'🔁 Loop'}</button></div>
+    <div style="margin-top:5px; display:flex; gap:10px;">
+        <button class="btn" onclick="speak(state.data[state.currentIndex].commute_content.english_text)">▶️ Play</button>
+        <button class="btn ${state.isLooping?'btn-accent':'btn-outline'}" onclick="toggleLoop()">${state.isLooping?'🔁 Stop':'🔁 Loop'}</button>
+    </div>
+
+    <div style="margin-top:15px; background:var(--bg); padding:10px; border-radius:8px; border:1px solid var(--border);">
+        <div style="font-size:0.8rem; color:var(--subtext); font-weight:bold; margin-bottom:5px;">Speed: <span id="commute-rate-val">${Number(state.voiceRate).toFixed(1)}</span>x</div>
+        <div style="display:flex; align-items:center;">
+            <span style="font-size:1.2rem;">🐢</span>
+            <input type="range" min="0.5" max="2.0" step="0.1" value="${state.voiceRate}" 
+                oninput="state.voiceRate=parseFloat(this.value); localStorage.setItem('le_voice_rate', this.value); document.getElementById('commute-rate-val').innerText=Number(this.value).toFixed(1);" style="flex:1; margin:0 10px;">
+            <span style="font-size:1.2rem;">🐇</span>
+        </div>
+    </div>
+
     <div id="txt-area" class="${state.showText?'':'hidden'}">
         <div class="text-en">${d.commute_content.english_text}</div>
         <div class="text-jp">${d.commute_content.japanese_translation}</div>
@@ -359,7 +373,7 @@ function renderListenContent(d) {
     </div>
     <button class="btn-outline" style="margin-top:15px;" onclick="state.showText=!state.showText;render()">${state.showText?'🙈 Hide':'👁️ Show'} Text</button>`;
 }
-
+    
 function renderSpeakContent(d) {
     const safeEng = (t) => t.replace(/'/g, "\\'");
     
