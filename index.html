@@ -121,6 +121,50 @@
 </div>
 
 <script>
+
+// --- PWA UPDATE DETECTION ---
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js').then(reg => {
+            // 新しいバージョンが見つかり、インストールされたらバナーを出す
+            reg.addEventListener('updatefound', () => {
+                const newWorker = reg.installing;
+                newWorker.addEventListener('statechange', () => {
+                    // 既に一度インストール済みの状態（controllerが存在する）で、新しいSWが入った場合
+                    if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                        showUpdateBanner();
+                    }
+                });
+            });
+        }).catch(err => console.log('SW registration failed: ', err));
+    });
+
+    // 💡 裏側でService Workerが切り替わったことを検知する保険の処理
+    let refreshing = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (refreshing) return;
+        refreshing = true;
+        // 自動でリロードさせるか、バナーのボタンでリロードさせるか選べます。
+        // ここではバナー表示を優先するため、強制リロードはコメントアウトしています。
+        // window.location.reload(); 
+    });
+}
+
+function showUpdateBanner() {
+    // すでにバナーがあれば何もしない
+    if (document.getElementById('update-banner')) return;
+
+    const banner = document.createElement('div');
+    banner.id = 'update-banner';
+    banner.innerHTML = `
+        <div style="position:fixed; bottom:80px; left:20px; right:20px; background:var(--danger); color:white; padding:15px; border-radius:12px; display:flex; justify-content:space-between; align-items:center; z-index:9999; box-shadow:0 4px 15px rgba(0,0,0,0.3);">
+            <span style="font-weight:bold; font-size: 0.9rem;">✨ 新バージョンがあります</span>
+            <button onclick="window.location.reload()" style="background:white; color:var(--danger); border:none; padding:8px 15px; border-radius:6px; font-weight:bold; cursor:pointer;">更新する</button>
+        </div>
+    `;
+    document.body.appendChild(banner);
+}
+    
 // --- CORE DATA & STATE ---
 let state = { 
     data: [], currentIndex: 0, mode: 'list', lessonTab: 'commute',
