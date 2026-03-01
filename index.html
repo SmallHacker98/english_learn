@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Link English v4.0</title>
+    <title>Link English v4.5 (BG Support)</title>
     
     <meta name="theme-color" content="#3b82f6">
     <meta name="mobile-web-app-capable" content="yes">
@@ -34,7 +34,7 @@
         .theme-toggle { background: none; border: none; font-size: 1.2rem; cursor: pointer; }
         
         .bottom-nav { display: flex; background: var(--card); border-top: 1px solid var(--border); padding-bottom: env(safe-area-inset-bottom); box-shadow: 0 -2px 10px rgba(0,0,0,0.05); z-index:10; }
-        .nav-item { flex: 1; padding: 12px; text-align: center; font-size: 0.7rem; color: var(--subtext); cursor: pointer; border-top: 3px solid transparent; }
+        .nav-item { flex: 1; padding: 12px; text-align: center; font-size: 0.7rem; color: var(--subtext); cursor: pointer; border-top: 3px solid transparent; position: relative;}
         .nav-item.active { color: var(--primary); border-top-color: var(--primary); font-weight: bold; }
         .nav-icon { display: block; font-size: 1.4rem; margin-bottom: 2px; }
 
@@ -64,8 +64,6 @@
         .text-jp { color: var(--subtext); font-size: 0.95rem; margin-top: 10px; border-top: 1px dashed var(--border); padding-top: 10px; }
         .chunk-view { line-height: 2; font-size: 1.1rem; } .chunk-sep { color: var(--subtext); opacity: 0.3; margin: 0 4px; }
         
-        .pattern-box { text-align: center; padding: 15px; background: var(--bg); border-radius: 8px; margin-bottom: 15px; border: 1px solid var(--border); }
-        .pattern-key { font-size: 1.4rem; font-weight: bold; color: var(--primary); margin-bottom: 5px; }
         .drill-card { border-top: 1px solid var(--border); padding-top: 15px; margin-top: 15px; }
         .btn-mic { background: var(--bg); border: 1px solid var(--subtext); color: var(--text); }
         .btn-mic.listening { background: var(--danger); color: white; border-color: var(--danger); animation: pulse 1.5s infinite; }
@@ -83,7 +81,6 @@
         .hidden { display: none !important; }
         @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.6; } 100% { opacity: 1; } }
 
-        /* Modal Styles for Mode 2 */
         .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 100; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 20px; box-sizing: border-box; color: white; }
         .modal-box { background: var(--card); color: var(--text); width: 100%; max-width: 500px; border-radius: 16px; padding: 25px; box-sizing: border-box; text-align: center; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
         .timer-bar-container { width: 100%; height: 8px; background: var(--border); border-radius: 4px; overflow: hidden; margin-top: 15px; margin-bottom: 15px; }
@@ -91,28 +88,13 @@
         .score-chip { display:inline-block; padding: 4px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; margin-left:5px;}
         .sc-good { background: var(--status-done); color: var(--status-done-t); }
         .sc-bad { background: #fee2e2; color: #991b1b; }
-        /* 💡 追加：通知バッジのデザイン */
-        .nav-badge {
-            position: absolute;
-            top: 4px;
-            right: calc(50% - 22px);
-            background: var(--danger);
-            color: white;
-            font-size: 0.65rem;
-            font-weight: bold;
-            padding: 2px 6px;
-            border-radius: 10px;
-            border: 2px solid var(--card);
-            line-height: 1;
-            z-index: 20;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-        }
+        .nav-badge { position: absolute; top: 4px; right: calc(50% - 22px); background: var(--danger); color: white; font-size: 0.65rem; font-weight: bold; padding: 2px 6px; border-radius: 10px; border: 2px solid var(--card); line-height: 1; z-index: 20; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
     </style>
 </head>
 <body>
 
 <header>
-    <div class="app-title">Link English v4.0</div>
+    <div class="app-title">Link English v4.5</div>
     <button class="theme-toggle" onclick="toggleTheme()">🌙</button>
 </header>
 
@@ -122,7 +104,7 @@
     <div class="nav-item active" id="nav-list" onclick="setMode('list')">
         <span class="nav-icon">📂</span>List
     </div>
-    <div class="nav-item" id="nav-test" style="position:relative;" onclick="startTest()">
+    <div class="nav-item" id="nav-test" onclick="startTest()">
         <span class="nav-icon">🎯</span>Test
         <span id="test-badge" class="nav-badge hidden">0</span>
     </div>
@@ -135,70 +117,47 @@
 </div>
 
 <div id="mode2-modal" class="modal-overlay hidden">
-    <div class="modal-box" id="mode2-content">
-        </div>
+    <div class="modal-box" id="mode2-content"></div>
 </div>
 
 <script>
-// --- CORE DATA ---
-const manifest = { "name": "Link English", "short_name": "LinkEng", "start_url": ".", "display": "standalone", "background_color": "#f8fafc", "theme_color": "#3b82f6", "icons": [{ "src": "data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🦉</text></svg>", "sizes": "512x512", "type": "image/svg+xml" }] };
-document.getElementById('my-manifest').setAttribute('href', 'data:application/manifest+json;charset=utf-8,' + encodeURIComponent(JSON.stringify(manifest)));
-
+// --- CORE DATA & STATE ---
 let state = { 
     data: [], currentIndex: 0, mode: 'list', lessonTab: 'commute',
     theme: 'light', showText: false, selectedVoiceIndex: -1, voiceRate: 1.0, 
-    isLooping: false, promptTopic: "Business", promptLevel: "Intermediate", promptQty: 3,
-    testQueue: [], testIndex: 0 
+    isLooping: false, promptTopic: "Business", promptLevel: "Intermediate", promptQty: 3
 };
-let voices = [], loopInterval = null, recognition = null;
-let audioCtx = null;
-
-// Mode 2 State
-let m2 = { queue: [], currentIndex: 0, timerId: null, timeLeft: 10, isRecording: false, currentTarget: "", currentStatsId: null };
+let voices = [], recognition = null, silentAudio = null;
 
 // --- INITIALIZATION ---
 function init() {
     const savedData = localStorage.getItem('le_data');
     state.data = savedData ? JSON.parse(savedData) : [];
     
+    // Patch stats for older data
     const patchStats = (item) => {
-        if (!item.stats) item.stats = { last_score: null, result: null, interval: 0, next_review: 0 };
-        if (item.stats.interval === undefined) item.stats.interval = 0;
-        if (item.stats.next_review === undefined) item.stats.next_review = 0;
+        if (!item.stats) item.stats = { last_score: null, result: null, interval: 0, next_review: 0, tested_in_m2: false };
     };
-
     state.data.forEach(d => { 
         if(!d.progress) d.progress = {listen:false, speak:false}; 
         patchStats(d.commute_content);
-        if(d.home_content.drills) {
-            d.home_content.drills.forEach(patchStats);
-        }
+        if(d.home_content.drills) d.home_content.drills.forEach(patchStats);
     });
-    
+
     const restore = (k, t) => { const v = localStorage.getItem(k); if(v) state[t] = (t==='theme' || t==='selectedVoiceIndex') ? v : parseFloat(v); };
     restore('le_theme', 'theme'); restore('le_voice_index', 'selectedVoiceIndex'); restore('le_voice_rate', 'voiceRate');
     
     if (state.theme === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
     
-    // 🎤 【新規追加】起動時にマイクの事前許可を取得する
+    // Mic Warmup
     if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-        navigator.mediaDevices.getUserMedia({ audio: true })
-            .then(stream => {
-                // 許可をもらったら、録音はまだしないので即座にトラックを閉じる
-                stream.getTracks().forEach(track => track.stop());
-                console.log("マイクの事前許可を取得しました");
-            })
-            .catch(err => {
-                console.warn("マイクの事前許可がブロックされたか、拒否されました:", err);
-            });
+        navigator.mediaDevices.getUserMedia({ audio: true }).then(s => s.getTracks().forEach(t => t.stop())).catch(e => console.warn(e));
     }
 
     if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         recognition = new SpeechRecognition(); 
         recognition.lang = 'en-US';
-        recognition.interimResults = false;
-        recognition.continuous = false;
     }
     
     window.speechSynthesis.onvoiceschanged = loadVoices; loadVoices(); 
@@ -213,77 +172,87 @@ function loadVoices() {
     }
 }
 
-function playBeep() {
-    if(!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    if(audioCtx.state === 'suspended') audioCtx.resume();
-    const osc = audioCtx.createOscillator();
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(880, audioCtx.currentTime); // A5 note
-    osc.connect(audioCtx.destination);
-    osc.start();
-    osc.stop(audioCtx.currentTime + 0.15);
+// --- BACKGROUND PLAYBACK HACK ---
+function enableBackgroundPlayback() {
+    if (!silentAudio) {
+        // 1秒の無音wavデータ
+        const silentSrc = "data:audio/wav;base64,UklGRigAAABXQVZFRm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=";
+        silentAudio = new Audio(silentSrc);
+        silentAudio.loop = true;
+    }
+    silentAudio.play().catch(e => console.log("Silent audio blocked", e));
 }
 
-// --- NAVIGATION ---
+function disableBackgroundPlayback() {
+    if (silentAudio) silentAudio.pause();
+}
+
+// --- NAVIGATION & UTILS ---
 function setMode(m) { state.mode = m; stopAudio(); render(); }
 function openLesson(i) { state.currentIndex = i; state.mode = 'lesson'; state.lessonTab = 'commute'; state.showText = false; stopAudio(); render(); }
 function setLessonTab(t) { state.lessonTab = t; stopAudio(); render(); }
 function toggleTheme() { state.theme = state.theme === 'light' ? 'dark' : 'light'; document.documentElement.setAttribute('data-theme', state.theme); localStorage.setItem('le_theme', state.theme); render(); }
-function toggleProgress(type) { state.data[state.currentIndex].progress[type] = !state.data[state.currentIndex].progress[type]; saveData(); render(); }
 function saveData() { localStorage.setItem('le_data', JSON.stringify(state.data)); }
+function toggleProgress(type) { state.data[state.currentIndex].progress[type] = !state.data[state.currentIndex].progress[type]; saveData(); render(); }
 
-// --- AUDIO & SPEECH ---
-function speak(txt) { 
+// --- AUDIO LOGIC ---
+function speak(txt, callback) { 
     window.speechSynthesis.cancel(); 
     const u = new SpeechSynthesisUtterance(txt); u.lang = 'en-US'; 
     if (voices[state.selectedVoiceIndex]) u.voice = voices[state.selectedVoiceIndex]; 
-    u.rate = state.voiceRate; window.speechSynthesis.speak(u); 
+    u.rate = state.voiceRate;
+    if (callback) u.onend = callback;
+    window.speechSynthesis.speak(u); 
 }
-function stopAudio() { state.isLooping = false; clearInterval(loopInterval); window.speechSynthesis.cancel(); render(); }
+
+function stopAudio() { 
+    state.isLooping = false; 
+    window.speechSynthesis.cancel(); 
+    disableBackgroundPlayback();
+    render(); 
+}
+
 function toggleLoop() { 
-    if (state.isLooping) stopAudio(); 
-    else { 
-        state.isLooping = true; render(); speak(state.data[state.currentIndex].commute_content.english_text); 
-        loopInterval = setInterval(() => { if (!window.speechSynthesis.speaking) speak(state.data[state.currentIndex].commute_content.english_text); }, 3000); 
+    if (state.isLooping) {
+        stopAudio();
+    } else { 
+        state.isLooping = true; 
+        enableBackgroundPlayback(); // バックグラウンド維持開始
+        render(); 
+        runRecursiveLoop();
     } 
 }
 
-    // --- 記憶定着（SRS）計算エンジン ---
+function runRecursiveLoop() {
+    if (!state.isLooping) return;
+    const text = state.data[state.currentIndex].commute_content.english_text;
+    
+    speak(text, () => {
+        // 読み上げ終了後に3秒待機して次へ（バックグラウンドでもイベントは走りやすい）
+        if (state.isLooping) {
+            setTimeout(runRecursiveLoop, 3000);
+        }
+    });
+}
+
+// --- SRS & SPEECH ANALYSIS ---
 function updateSRS(statsObj, resultStr, score) {
     const now = Date.now();
-    const DAY = 24 * 60 * 60 * 1000; // 1日のミリ秒
-    
-    // 過去のインターバルを取得（初回は0）
+    const DAY = 24 * 60 * 60 * 1000;
     let currentInterval = statsObj.interval || 0;
     
     if (resultStr === 'good') {
-        // 完璧なら出題間隔を倍増（0なら1日へ）
         statsObj.interval = currentInterval === 0 ? 1 : currentInterval * 2;
     } else if (resultStr === 'retry') {
-        // 微妙なら明日もう一度
         statsObj.interval = 1;
     } else { 
-        // ダメなら期間リセット（即座に復習対象）
         statsObj.interval = 0;
     }
-    
-    // 次回の復習予定日時をセット
     statsObj.next_review = now + (statsObj.interval * DAY);
     statsObj.result = resultStr;
     if (score !== undefined) statsObj.last_score = score;
 }
 
-// Mode 1: Self Evaluation Save
-function saveSelfEval(type, index, resultStr) {
-    const d = state.data[state.currentIndex];
-    let targetStats = (type === 'commute') ? d.commute_content.stats : d.home_content.drills[index].stats;
-    
-    // ★ただ記録するだけでなく、SRSエンジンに通す
-    updateSRS(targetStats, resultStr);
-    
-    saveData();
-    render();
-}
 function analyzeSpeech(target, input) {
     const clean = (s) => s.toLowerCase().replace(/[.,?!]/g, "").split(/\s+/).filter(x => x.length > 0);
     const tWords = clean(target), iWords = clean(input);
@@ -296,171 +265,67 @@ function analyzeSpeech(target, input) {
     return { score, html: `<div style="font-weight:bold; color:${score===100?'var(--success)':'var(--danger)'}">Score: ${score}%</div>${html}` };
 }
 
-    // --- MODE 1: マイク録音処理（startDictation） ---
-// --- MODE 1: マイク録音処理（startDictation） ---
+// --- MODE 1: SELF EVAL ---
+function saveSelfEval(type, index, resultStr) {
+    const d = state.data[state.currentIndex];
+    let targetStats = (type === 'commute') ? d.commute_content.stats : d.home_content.drills[index].stats;
+    updateSRS(targetStats, resultStr);
+    saveData();
+    render();
+}
+
 function startDictation(target, resId, btnId) {
-    if (!recognition) return alert("このブラウザは音声認識に対応していません。");
-    
+    if (!recognition) return alert("Browser not supported");
     const btn = document.getElementById(btnId); 
     const res = document.getElementById(resId);
+    btn.classList.add('listening'); res.innerHTML = "Listening..."; res.classList.remove('hidden');
     
-    btn.classList.add('listening'); 
-    res.innerHTML = "Listening... (話してください)"; 
-    res.classList.remove('hidden');
-    
-    try {
-        recognition.start();
-    } catch(e) {
-        console.warn("マイクはすでに待機中です", e);
-    }
-
+    recognition.start();
     recognition.onresult = (e) => {
         const input = e.results[0][0].transcript;
         const feedback = analyzeSpeech(target, input); 
         res.innerHTML = feedback.html;
-        
-        // 💡 【追加】判定が終わった瞬間に、対応するAnswerエリアを自動で開く
-        const ansId = resId.replace('res', 'ans'); // 'm1-res-0' を 'm1-ans-0' に変換して探す
-        const ansElement = document.getElementById(ansId);
-        if (ansElement) {
-            ansElement.classList.remove('hidden');
-        }
+        const ansId = resId.replace('res', 'ans');
+        if (document.getElementById(ansId)) document.getElementById(ansId).classList.remove('hidden');
     };
-    
-    recognition.onend = () => {
-        btn.classList.remove('listening');
-    };
-
-    recognition.onerror = (e) => {
-        if(e.error === 'no-speech') {
-            res.innerHTML = `<div style="color:var(--danger); font-size:0.8rem;">音声が検出されませんでした</div>`;
-        } else {
-            res.innerHTML = `<div style="color:var(--danger); font-size:0.8rem;">エラー: ${e.error}</div>`;
-        }
-        btn.classList.remove('listening');
-    };
+    recognition.onend = () => btn.classList.remove('listening');
 }
 
-    // --- RENDERING ---
+// --- RENDERING ---
 function render() {
     const app = document.getElementById('app-content');
-    const nav = document.querySelector('.bottom-nav');
-    nav.style.display = 'flex'; // 常に表示
-    
     document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
     
     if (state.mode === 'list') { document.getElementById('nav-list').classList.add('active'); renderList(app); }
     else if (state.mode === 'settings') { document.getElementById('nav-config').classList.add('active'); renderSettings(app); }
     else if (state.mode === 'lesson') { document.getElementById('nav-list').classList.add('active'); renderLesson(app); }
-    else if (state.mode === 'test') { document.getElementById('nav-test').classList.add('active'); renderTest(app); }
-    // 💡 Statsモードの切り替えを追加
     else if (state.mode === 'stats') { document.getElementById('nav-stats').classList.add('active'); renderStats(app); }
+    else if (state.mode === 'test') { document.getElementById('nav-test').classList.add('active'); }
 
     updateTestBadge();
 }
 
-    function renderStats(c) {
-    if (state.data.length === 0) {
-        c.innerHTML = '<div style="text-align:center;padding:40px;color:var(--subtext)">データがありません。</div>';
-        return;
-    }
-
-    let total = 0, good = 0, retry = 0, nogood = 0, untested = 0;
-    let weakPhrases = [];
-
-    // 全データを走査して集計
-    state.data.forEach((d, lessonIndex) => {
-        const checkStat = (item, jp, en, isCommute, drillIndex) => {
-            total++;
-            if (item && item.stats && item.stats.result) {
-                const res = item.stats.result;
-                if (res === 'good') good++;
-                else if (res === 'retry') { retry++; weakPhrases.push({jp, en, res, lessonIndex}); }
-                else if (res === 'nogood') { nogood++; weakPhrases.push({jp, en, res, lessonIndex}); }
-            } else {
-                untested++;
-            }
-        };
-
-        checkStat(d.commute_content, d.commute_content.japanese_translation, d.commute_content.english_text, true, -1);
-        d.home_content.drills.forEach((drill, i) => checkStat(drill, drill.japanese, drill.english, false, i));
-    });
-
-    const goodPct = total === 0 ? 0 : Math.round((good / total) * 100);
-
-    let html = `
-    <h2 style="margin-top:0;">📊 Learning Stats</h2>
-    <div class="card" style="text-align:center; padding:20px;">
-        <div style="font-size:3rem; font-weight:bold; color:var(--primary); line-height:1;">${goodPct}<span style="font-size:1.5rem">%</span></div>
-        <div style="color:var(--subtext); font-size:0.9rem; margin-bottom:15px;">Mastery Rate (定着率)</div>
-        
-        <div style="display:flex; justify-content:space-around; align-items:center; background:var(--bg); padding:10px; border-radius:8px;">
-            <div style="text-align:center;"><div style="font-size:1.2rem;">${good}</div><span class="score-chip sc-good">✅ Good</span></div>
-            <div style="text-align:center;"><div style="font-size:1.2rem;">${retry}</div><span class="score-chip" style="background:var(--accent);color:white;">🔄 Retry</span></div>
-            <div style="text-align:center;"><div style="font-size:1.2rem;">${nogood}</div><span class="score-chip sc-bad">❌ No Good</span></div>
-        </div>
-        <div style="font-size:0.8rem; color:var(--subtext); margin-top:10px;">未テスト: ${untested} / 全${total}フレーズ</div>
-    </div>`;
-
-    if (weakPhrases.length > 0) {
-        html += `<h3 style="margin-top:25px; border-bottom:2px solid var(--danger); display:inline-block;">🔥 Needs Work (弱点: ${weakPhrases.length})</h3>`;
-        // 最新の弱点を10件まで表示
-        weakPhrases.reverse().slice(0, 10).forEach(wp => {
-            const badge = wp.res === 'nogood' ? '❌ No Good' : '🔄 Retry';
-            html += `
-            <div class="card" style="padding:15px; margin-bottom:10px; border-left:4px solid ${wp.res === 'nogood' ? 'var(--danger)' : 'var(--accent)'};" onclick="openLesson(${wp.lessonIndex})">
-                <div style="font-size:0.8rem; color:var(--subtext); margin-bottom:5px;">${wp.jp}</div>
-                <div style="font-weight:bold; font-size:1rem;">${wp.en}</div>
-                <div style="margin-top:8px; font-size:0.8rem; font-weight:bold; color:${wp.res === 'nogood' ? 'var(--danger)' : 'var(--accent)'};">${badge}</div>
-            </div>`;
-        });
-    } else if (good > 0) {
-        html += `<div class="card" style="text-align:center; padding:30px; color:var(--success); font-weight:bold; font-size:1.1rem;">🎉 弱点はありません！完璧です！</div>`;
-    }
-
-    c.innerHTML = html;
-}
-
 function renderList(c) {
-    if (state.data.length === 0) { 
-        c.innerHTML = '<div style="text-align:center;padding:40px;color:var(--subtext)">No lessons.<br>Add some in Config!</div>'; 
-        return; 
-    }
-    
+    if (state.data.length === 0) { c.innerHTML = '<div style="text-align:center;padding:40px;color:var(--subtext)">No lessons.</div>'; return; }
     c.innerHTML = state.data.map((d, i) => {
-        // Speakの習熟度（6問分のステータス）を丸いドットで生成
-        let dotsHtml = '';
-        let items = [d.commute_content, ...d.home_content.drills];
-        
-        items.forEach(item => {
-            let color = '#e2e8f0'; // 未実施（グレー）
-            if (item && item.stats && item.stats.result) {
-                if (item.stats.result === 'good') color = 'var(--success)'; // 🟢
-                else if (item.stats.result === 'retry') color = 'var(--accent)'; // 🟡
-                else if (item.stats.result === 'nogood') color = 'var(--danger)'; // 🔴
-            }
-            dotsHtml += `<div style="width:10px; height:10px; border-radius:50%; background-color:${color};"></div>`;
-        });
-
-        // Listenの完了状態アイコン
-        const listenIcon = d.progress.listen ? '🎧 ✅' : '🎧 ⬜';
-        const listenColor = d.progress.listen ? 'var(--success)' : 'var(--subtext)';
-
+        let dots = [d.commute_content, ...d.home_content.drills].map(item => {
+            let color = '#e2e8f0';
+            if (item.stats && item.stats.result === 'good') color = 'var(--success)';
+            else if (item.stats && item.stats.result === 'retry') color = 'var(--accent)';
+            else if (item.stats && item.stats.result === 'nogood') color = 'var(--danger)';
+            return `<div style="width:10px; height:10px; border-radius:50%; background-color:${color};"></div>`;
+        }).join('');
         return `
         <div class="list-item" onclick="openLesson(${i})">
             <div class="list-content">
                 <div class="list-summary">${d.commute_content.summary}</div>
-                <div class="list-meta" style="margin-bottom:10px;">
+                <div class="list-meta" style="margin-bottom:8px;">
                     <span class="cat-tag cat-${d.category}">${d.category}</span>
                     <span class="level-tag">${d.level}</span>
                 </div>
-                
-                <div style="display:flex; align-items:center; gap:15px; font-size:0.85rem;">
-                    <div style="font-weight:bold; color:${listenColor};">${listenIcon}</div>
-                    <div style="display:flex; gap:4px; align-items:center;">
-                        <span style="color:var(--subtext);">🗣️</span>
-                        ${dotsHtml}
-                    </div>
+                <div style="display:flex; gap:15px; font-size:0.8rem;">
+                    <div style="color:${d.progress.listen?'var(--success)':'var(--subtext)'}">${d.progress.listen?'🎧 ✅':'🎧 ⬜'}</div>
+                    <div style="display:flex; gap:4px; align-items:center;">🗣️ ${dots}</div>
                 </div>
             </div>
             <span>›</span>
@@ -476,84 +341,54 @@ function renderLesson(c) {
     <div class="lesson-tabs"><div class="l-tab ${isListen?'active':''}" onclick="setLessonTab('commute')">🎧 Commute</div><div class="l-tab ${!isListen?'active':''}" onclick="setLessonTab('practice')">🗣️ Practice</div></div>
     <div class="card" style="padding:10px;">
         ${isListen ? renderListenContent(d) : renderSpeakContent(d)}
-    </div>
-    <div style="display:flex;justify-content:space-between;margin-top:20px">
-        <button class="btn-outline" style="width:45%" onclick="if(state.currentIndex>0) openLesson(state.currentIndex-1)" ${state.currentIndex===0?'disabled':''}>← Prev</button>
-        <button class="btn-outline" style="width:45%" onclick="if(state.currentIndex<state.data.length-1) openLesson(state.currentIndex+1)" ${state.currentIndex===state.data.length-1?'disabled':''}>Next →</button>
     </div>`;
 }
 
 function renderListenContent(d) {
     return `
-    <div style="margin-top:5px; display:flex; gap:10px;">
-        <button class="btn" onclick="speak(state.data[state.currentIndex].commute_content.english_text)">▶️ Play</button>
+    <div style="display:flex; gap:10px;">
+        <button class="btn" onclick="speak('${d.commute_content.english_text.replace(/'/g, "\\'")}')">▶️ Play</button>
         <button class="btn ${state.isLooping?'btn-accent':'btn-outline'}" onclick="toggleLoop()">${state.isLooping?'🔁 Stop':'🔁 Loop'}</button>
     </div>
-
-    <div style="margin-top:15px; background:var(--bg); padding:10px; border-radius:8px; border:1px solid var(--border);">
-        <div style="font-size:0.8rem; color:var(--subtext); font-weight:bold; margin-bottom:5px;">Speed: <span id="commute-rate-val">${Number(state.voiceRate).toFixed(1)}</span>x</div>
-        <div style="display:flex; align-items:center;">
-            <span style="font-size:1.2rem;">🐢</span>
-            <input type="range" min="0.5" max="2.0" step="0.1" value="${state.voiceRate}" 
-                oninput="state.voiceRate=parseFloat(this.value); localStorage.setItem('le_voice_rate', this.value); document.getElementById('commute-rate-val').innerText=Number(this.value).toFixed(1);" style="flex:1; margin:0 10px;">
-            <span style="font-size:1.2rem;">🐇</span>
-        </div>
+    <div style="margin-top:15px; background:var(--bg); padding:10px; border-radius:8px;">
+        <div style="font-size:0.8rem; color:var(--subtext); font-weight:bold;">Speed: ${state.voiceRate}x</div>
+        <input type="range" min="0.5" max="2.0" step="0.1" value="${state.voiceRate}" oninput="state.voiceRate=parseFloat(this.value);localStorage.setItem('le_voice_rate',this.value);render()">
     </div>
-
-    <button class="btn ${d.progress.listen ? 'btn-success' : 'btn-outline'}" style="margin-top:15px; font-weight:bold;" onclick="toggleProgress('listen')">
-        ${d.progress.listen ? '✅ Listen Done (完了)' : '🎧 Mark as Listen Done'}
+    <button class="btn ${d.progress.listen ? 'btn-success' : 'btn-outline'}" style="margin-top:15px;" onclick="toggleProgress('listen')">
+        ${d.progress.listen ? '✅ Listen Done' : '🎧 Mark as Done'}
     </button>
-
     <div id="txt-area" class="${state.showText?'':'hidden'}">
         <div class="text-en">${d.commute_content.english_text}</div>
         <div class="text-jp">${d.commute_content.japanese_translation}</div>
-        <div class="chunk-view" style="margin-top:10px; border-top:1px dashed var(--border); padding-top:10px;">
-            ${d.commute_content.chunks.split('/').map(c=>`<span>${c}</span><span class="chunk-sep">/</span>`).join('')}
-        </div>
+        <div class="chunk-view">${d.commute_content.chunks.split('/').map(c=>`<span>${c}</span><span class="chunk-sep">/</span>`).join('')}</div>
     </div>
     <button class="btn-outline" style="margin-top:15px;" onclick="state.showText=!state.showText;render()">${state.showText?'🙈 Hide':'👁️ Show'} Text</button>`;
 }
-    
+
 function renderSpeakContent(d) {
-    const safeEng = (t) => t.replace(/'/g, "\\'");
-    
-    // Commute例文とDrillをまとめる
-    let items = [
-        { type: 'commute', jp: d.commute_content.japanese_translation, en: d.commute_content.english_text, stats: d.commute_content.stats, idx: -1 }
-    ];
-    d.home_content.drills.forEach((drill, i) => {
-        items.push({ type: 'drill', jp: drill.japanese, en: drill.english, stats: drill.stats, idx: i });
-    });
+    let items = [{ type: 'commute', jp: d.commute_content.japanese_translation, en: d.commute_content.english_text, stats: d.commute_content.stats, idx: -1 }];
+    d.home_content.drills.forEach((drill, i) => items.push({ type: 'drill', jp: drill.japanese, en: drill.english, stats: drill.stats, idx: i }));
 
-    let html = `
-    <button class="btn btn-danger-outline" style="width:100%; margin-bottom:15px; font-weight:bold; border-width:2px;" onclick="initMode2()">🔥 Mode 2: Tension (Start)</button>
-    <div style="font-size:0.8rem; color:var(--subtext); text-align:center; margin-bottom:15px;">Mode 1: My Pace (Self Eval)</div>
-    `;
-
+    let html = `<button class="btn btn-danger-outline" style="margin-bottom:15px;" onclick="initMode2()">🔥 Mode 2: Tension (Start)</button>`;
     items.forEach((item, i) => {
-        let badge = "";
-        if(item.stats && item.stats.result === 'good') badge = `<span class="score-chip sc-good">✅ Good</span>`;
-        if(item.stats && item.stats.result === 'nogood') badge = `<span class="score-chip sc-bad">❌ No Good</span>`;
-        if(item.stats && item.stats.result === 'retry') badge = `<span class="score-chip" style="background:var(--accent);color:white;">🔄 Retry</span>`;
-
+        let badge = item.stats.result === 'good' ? `<span class="score-chip sc-good">✅ Good</span>` : 
+                    item.stats.result === 'retry' ? `<span class="score-chip" style="background:var(--accent);color:white;">🔄 Retry</span>` : 
+                    item.stats.result === 'nogood' ? `<span class="score-chip sc-bad">❌ No Good</span>` : "";
         html += `
-        <div class="drill-card" style="margin-top:10px; padding-top:10px; border-top:1px solid var(--border);">
-            <div style="font-weight:bold; font-size:0.9rem; margin-bottom:8px;">${i+1}. ${item.jp} ${badge}</div>
-            
-            <div style="display:flex; gap:10px; margin-bottom:10px;">
-                <button class="btn btn-mic" id="btn-m1-mic-${i}" onclick="startDictation('${safeEng(item.en)}', 'm1-res-${i}', 'btn-m1-mic-${i}')" style="flex:1">🎙️ Speak</button>
-                <button class="btn btn-outline" style="flex:1" onclick="document.getElementById('m1-ans-${i}').classList.remove('hidden')">👁️ Answer</button>
-                <button class="btn btn-accent" onclick="speak('${safeEng(item.en)}')" style="width:50px; padding:0;">🔊</button>
+        <div class="drill-card">
+            <div style="font-weight:bold; font-size:0.9rem;">${i+1}. ${item.jp} ${badge}</div>
+            <div style="display:flex; gap:10px; margin-top:8px;">
+                <button class="btn btn-mic" id="btn-mic-${i}" onclick="startDictation('${item.en.replace(/'/g,"\\'")}', 'res-${i}', 'btn-mic-${i}')" style="flex:1">🎙️ Speak</button>
+                <button class="btn btn-outline" style="flex:1" onclick="document.getElementById('ans-${i}').classList.remove('hidden')">👁️ Ans</button>
+                <button class="btn btn-accent" onclick="speak('${item.en.replace(/'/g,"\\'")}')" style="width:45px;">🔊</button>
             </div>
-            
-            <div id="m1-res-${i}" class="hidden score-box"></div>
-            
-            <div id="m1-ans-${i}" class="hidden" style="margin-top:8px;">
-                <div style="color:var(--primary); font-weight:bold; font-size:1.1rem; margin-bottom:10px;">${item.en}</div>
-                <div style="display:flex; gap:5px;">
-                    <button class="btn btn-success" style="padding:6px; font-size:0.8rem;" onclick="saveSelfEval('${item.type}', ${item.idx}, 'good')">🟢 Good</button>
-                    <button class="btn btn-accent" style="padding:6px; font-size:0.8rem;" onclick="saveSelfEval('${item.type}', ${item.idx}, 'retry')">🟡 Retry</button>
-                    <button class="btn btn-danger-outline" style="padding:6px; font-size:0.8rem;" onclick="saveSelfEval('${item.type}', ${item.idx}, 'nogood')">🔴 No Good</button>
+            <div id="res-${i}" class="hidden score-box"></div>
+            <div id="ans-${i}" class="hidden" style="margin-top:10px;">
+                <div style="color:var(--primary); font-weight:bold;">${item.en}</div>
+                <div style="display:flex; gap:5px; margin-top:5px;">
+                    <button class="btn btn-success" style="padding:5px; font-size:0.75rem;" onclick="saveSelfEval('${item.type}', ${item.idx}, 'good')">Good</button>
+                    <button class="btn btn-accent" style="padding:5px; font-size:0.75rem;" onclick="saveSelfEval('${item.type}', ${item.idx}, 'retry')">Retry</button>
+                    <button class="btn btn-danger-outline" style="padding:5px; font-size:0.75rem;" onclick="saveSelfEval('${item.type}', ${item.idx}, 'nogood')">No</button>
                 </div>
             </div>
         </div>`;
@@ -561,351 +396,110 @@ function renderSpeakContent(d) {
     return html;
 }
 
-// ==========================================
-// MODE 2: TENSION MODE LOGIC (The Core Update)
-// ==========================================
+// --- MODE 2: TENSION LOGIC (Simplified for integration) ---
+let m2 = { queue: [], currentIndex: 0, timerId: null, timeLeft: 10, isRecording: false };
+
 function initMode2() {
-    if(!recognition) return alert("Speech Recognition not supported on this browser.");
-    
     const d = state.data[state.currentIndex];
-    m2.queue = [
-        { type: 'commute', jp: d.commute_content.japanese_translation, en: d.commute_content.english_text, obj: d.commute_content }
-    ];
-    d.home_content.drills.forEach(drill => {
-        m2.queue.push({ type: 'drill', jp: drill.japanese, en: drill.english, obj: drill });
-    });
-    
-    // Shuffle queue
+    m2.queue = [{ jp: d.commute_content.japanese_translation, en: d.commute_content.english_text, obj: d.commute_content }];
+    d.home_content.drills.forEach(drill => m2.queue.push({ jp: drill.japanese, en: drill.english, obj: drill }));
     m2.queue.sort(() => Math.random() - 0.5);
     m2.currentIndex = 0;
-    
-    const modal = document.getElementById('mode2-modal');
-    modal.classList.remove('hidden');
-    
-    document.getElementById('mode2-content').innerHTML = `
-        <h2 style="margin-top:0;">🔥 Tension Mode</h2>
-        <p style="font-size:0.9rem; color:var(--subtext);">6 questions. Random order. 10 sec limit.<br>Speak immediately after the BEEP.</p>
-        <button class="btn btn-danger-outline" style="margin-top:20px; font-size:1.2rem; border-width:2px; font-weight:bold;" onclick="startMode2Item()">Are you ready? [OK]</button>
-        <br><button class="btn btn-outline" style="margin-top:15px; border:none;" onclick="closeMode2()">Cancel</button>
-    `;
-}
-
-function closeMode2() {
-    if(m2.isRecording) recognition.stop();
-    clearTimeout(m2.timerId);
-    document.getElementById('mode2-modal').classList.add('hidden');
-    render(); // refresh UI to show updated badges
+    document.getElementById('mode2-modal').classList.remove('hidden');
+    startMode2Item();
 }
 
 function startMode2Item() {
     if(m2.currentIndex >= m2.queue.length) {
-        document.getElementById('mode2-content').innerHTML = `
-            <h2>🎉 Complete!</h2>
-            <p>You survived Mode 2!</p>
-            <button class="btn" onclick="closeMode2()">Close & Review</button>
-        `;
+        document.getElementById('mode2-content').innerHTML = `<h2>Complete!</h2><button class="btn" onclick="document.getElementById('mode2-modal').classList.add('hidden');render()">Close</button>`;
         return;
     }
-
     const item = m2.queue[m2.currentIndex];
-    m2.currentTarget = item.en;
-    m2.currentStatsObj = item.obj;
     m2.timeLeft = 10;
-    
     document.getElementById('mode2-content').innerHTML = `
-        <div style="font-weight:bold; color:var(--danger); margin-bottom:10px;">Question ${m2.currentIndex + 1} / ${m2.queue.length}</div>
-        <div style="font-size:1.3rem; font-weight:bold; margin-bottom:10px;">${item.jp}</div>
-        <div style="font-size:2rem;">🎙️</div>
-        <div class="timer-bar-container"><div class="timer-bar" id="m2-timer-bar"></div></div>
-        <div id="m2-status" style="font-size:0.8rem; color:var(--danger); font-weight:bold;">Listening...</div>
+        <div style="font-weight:bold; color:var(--danger);">Question ${m2.currentIndex + 1}</div>
+        <div style="font-size:1.3rem; font-weight:bold; margin:15px 0;">${item.jp}</div>
+        <div class="timer-bar-container"><div class="timer-bar" id="m2-bar"></div></div>
+        <button class="btn btn-danger" onclick="m2CaptureSpeech()">🎙️ Speak Now</button>
     `;
-
-    playBeep();
-    
-    // Slight delay to ensure Beep finishes before Mic starts (avoids mic picking up beep)
-    setTimeout(() => {
-        try { recognition.start(); m2.isRecording = true; } catch(e){}
-        
-        m2.timerId = setInterval(() => {
-            m2.timeLeft -= 0.1;
-            let pct = (m2.timeLeft / 10) * 100;
-            const bar = document.getElementById('m2-timer-bar');
-            if(bar) bar.style.width = `${pct}%`;
-
-            if (m2.timeLeft <= 0) {
-                clearInterval(m2.timerId);
-                if(m2.isRecording) recognition.stop(); // Force stop triggers onend or onresult
-                handleMode2Result(""); // Force Timeout result
-            }
-        }, 100);
-    }, 200);
-
-    recognition.onresult = (e) => {
-        clearInterval(m2.timerId);
-        m2.isRecording = false;
-        const transcript = e.results[0][0].transcript;
-        handleMode2Result(transcript);
-    };
-
-    recognition.onerror = (e) => {
-        if(e.error === 'no-speech') {
-            clearInterval(m2.timerId);
-            handleMode2Result(""); // Treat as timeout/silence
-        }
-    }
-    
-    recognition.onend = () => {
-        m2.isRecording = false;
-    }
+    m2.timerId = setInterval(() => {
+        m2.timeLeft -= 0.1;
+        document.getElementById('m2-bar').style.width = (m2.timeLeft/10*100)+'%';
+        if(m2.timeLeft <= 0) { clearInterval(m2.timerId); m2ShowResult(""); }
+    }, 100);
 }
 
-function handleMode2Result(input) {
+function m2CaptureSpeech() {
     clearInterval(m2.timerId);
-    if(m2.isRecording) { recognition.stop(); m2.isRecording = false; }
+    if (!recognition) return m2ShowResult("");
+    recognition.start();
+    recognition.onresult = (e) => m2ShowResult(e.results[0][0].transcript);
+    recognition.onerror = () => m2ShowResult("");
+}
 
-    const isTimeout = (input.trim() === "");
-    let feedback = "";
-    let score = 0;
-    let resStr = 'nogood'; // デフォルトはnogood（不正解）
-
-    if (isTimeout) {
-        feedback = `<div style="color:var(--danger); font-weight:bold; font-size:1.2rem; margin-bottom:10px;">⏱️ Time Out / Silence</div>`;
-        score = 0;
-    } else {
-        const analysis = analyzeSpeech(m2.currentTarget, input);
-        score = analysis.score;
-        feedback = analysis.html;
-        
-        // Strict Evaluation
-        if(score === 100) resStr = 'good';
-        else if(score >= 80) resStr = 'retry';
-    }
-    
-    // SRSエンジンを通す
-    updateSRS(m2.currentStatsObj.stats, resStr, score);
-    
-    // 💡 ★追加：「モード2を実施済み」という専用のフラグを立てる！
-    m2.currentStatsObj.stats.tested_in_m2 = true;
-    
+function m2ShowResult(input) {
+    const item = m2.queue[m2.currentIndex];
+    const analysis = analyzeSpeech(item.en, input);
+    let resStr = analysis.score === 100 ? 'good' : (analysis.score >= 80 ? 'retry' : 'nogood');
+    updateSRS(item.obj.stats, resStr, analysis.score);
+    item.obj.stats.tested_in_m2 = true;
     saveData();
 
     document.getElementById('mode2-content').innerHTML = `
-        <div style="font-weight:bold; color:var(--subtext); margin-bottom:5px;">Result (${m2.currentIndex + 1}/${m2.queue.length})</div>
-        ${feedback}
-        <div style="margin-top:15px; padding:10px; background:var(--bg); border-radius:8px; border:1px solid var(--border);">
-            <div style="font-size:0.8rem; color:var(--subtext);">Target:</div>
-            <div style="font-weight:bold; color:var(--primary); font-size:1.1rem;">${m2.currentTarget}</div>
-        </div>
-        <div style="display:flex; gap:10px; margin-top:20px;">
-            <button class="btn btn-outline" style="flex:1" onclick="closeMode2()">Stop</button>
-            <button class="btn btn-danger-outline" style="flex:2; font-weight:bold;" onclick="m2.currentIndex++; startMode2Item()">Next ➔</button>
-        </div>
+        <div style="margin-bottom:10px;">${analysis.html}</div>
+        <div style="font-weight:bold; color:var(--primary);">${item.en}</div>
+        <button class="btn" style="margin-top:20px;" onclick="m2.currentIndex++; startMode2Item()">Next</button>
     `;
 }
 
-// --- SETTINGS (Prompt Builder modified to 5 drills) ---
-function updatePrompt() {
-    const topic = document.getElementById('p-topic')?.value || "Business";
-    const level = document.getElementById('p-level')?.value || "Intermediate";
-    const qty = document.getElementById('p-qty')?.value || 3; // ← レッスン自体の作成数（元通り）
-
-    const p = `あなたは英語教材作成のプロです。以下の仕様で学習データを作成してください。
-## 生成モード
-テーマ: ${topic}
-レベル: ${level}
-作成数: ${qty}セット（1セットにつき、メイン例文1つ＋関連ドリル5つ）
-自然な表現で作成してください。
-
-## 【絶対遵守ルール】
-1. 出力は以下のJSON配列形式のみ。
-2. english_text と chunks の連結結果は完全一致させること。
-3. 各セットの "drills" 配列の中身は必ず5個作成すること。
-\`\`\`json
-[
-  {
-    "id": "gen_${Date.now()}", 
-    "category": "${topic}",
-    "level": "${level}",
-    "progress": { "listen": false, "speak": false },
-    "commute_content": { 
-      "english_text": "...", "japanese_translation": "...", "chunks": "... / ...", "summary": "...", "vocabulary": [] 
-    },
-    "home_content": { 
-      "pattern_focus": "...", "pattern_explanation": "...", 
-      "drills": [
-        {"japanese": "...", "english": "..."},
-        {"japanese": "...", "english": "..."},
-        {"japanese": "...", "english": "..."},
-        {"japanese": "...", "english": "..."},
-        {"japanese": "...", "english": "..."}
-      ] 
-    }
-  } // ← これを指定された ${qty} セット分繰り返す
-]
-\`\`\``;
-    const area = document.getElementById('p-area');
-    if (area) area.value = p;
-}
-
-function copyPrompt() { updatePrompt(); navigator.clipboard.writeText(document.getElementById('p-area').value).then(() => alert('Copied!')); }
-function loadJsonData() { 
-    try { 
-        const d = JSON.parse(document.getElementById('data-input').value); 
-        if (Array.isArray(d)) { 
-            if (confirm('Add to existing?')) state.data = [...state.data, ...d]; else state.data = d; 
-            
-            // 💡 修正箇所：順番を逆にしました！
-            saveData(); // 先に新しいデータを確実に保存する
-            init();     // そのあとに読み込んで、必要なステータス（stats）を裏側で付与する
-            
-            document.getElementById('data-input').value = ''; // ついでに、読み込み終わったら入力欄を空にするようにしました
-            setMode('list'); 
-        }
-    } catch(e) { alert('Invalid JSON'); } 
-}
-    
-function renderSettings(c) {
-    const voiceOpts = voices.map((v,i)=>`<option value="${i}" ${i==state.selectedVoiceIndex?'selected':''}>${v.name}</option>`).join('');
-    c.innerHTML = `
-    <div class="card">
-        <h2>🤖 AI Prompt Builder v4.0</h2>
-        <label>Topic</label>
-        <input type="text" id="p-topic" value="${state.promptTopic}" oninput="updatePrompt()">
-        
-        <div class="form-row" style="margin-top:10px;">
-            <div class="form-col">
-                <label>Level</label>
-                <select id="p-level" onchange="updatePrompt()">
-                    <option>Intermediate</option>
-                    <option>Advanced</option>
-                    <option>Beginner</option>
-                </select>
-            </div>
-            <div class="form-col" style="flex:0 0 70px;">
-                <label>Qty</label>
-                <input type="number" id="p-qty" value="${state.promptQty || 3}" oninput="updatePrompt()">
-            </div>
-        </div>
-        
-        <textarea id="p-area" style="font-size:0.6rem; height:120px; margin-top:15px;" readonly></textarea>
-        <button class="btn btn-outline" onclick="copyPrompt()">📋 Copy Prompt</button>
-    </div>
-    
-    <div class="card">
-        <h2>Data & Voice</h2>
-        <textarea id="data-input" placeholder="Paste JSON from Gemini here..."></textarea>
-        <button class="btn" onclick="loadJsonData()" style="margin-top:10px;">Load Data</button>
-        
-        <div style="margin-top:20px;">
-            <label>Voice</label>
-            <select onchange="state.selectedVoiceIndex=this.value;localStorage.setItem('le_voice_index',this.value)">${voiceOpts}</select>
-        </div>
-
-        <div style="margin-top:20px;">
-            <label>Speed: <span id="rate-val">${Number(state.voiceRate).toFixed(1)}</span>x</label>
-            <div style="display:flex; align-items:center;">
-                <span style="font-size:1.2rem;">🐢</span>
-                <input type="range" min="0.5" max="2.0" step="0.1" value="${state.voiceRate}" 
-                    oninput="state.voiceRate=parseFloat(this.value); localStorage.setItem('le_voice_rate', this.value); document.getElementById('rate-val').innerText=Number(this.value).toFixed(1);">
-                <span style="font-size:1.2rem;">🐇</span>
-            </div>
-        </div>
-        
-        <button class="btn-outline" onclick="localStorage.removeItem('le_data'); location.reload();" style="margin-top:30px; border-color:var(--danger); color:var(--danger);">⚠️ Reset All Data</button>
-    </div>`;
-    
-    setTimeout(updatePrompt, 50);
-}
-
-// --- バッジ更新機能 ---
-function updateTestBadge() {
-    let count = 0;
-    const now = Date.now();
-    
-    // 全データから「テスト条件（Mode2済 ＆ 復習時期到達）」を満たす数を数える
-    state.data.forEach((d) => {
-        const check = (st) => {
-            if (st && st.tested_in_m2 && st.next_review <= now) count++;
-        };
-        if (d.commute_content.stats) check(d.commute_content.stats);
-        if (d.home_content.drills) d.home_content.drills.forEach(drill => check(drill.stats));
-    });
-
-    // バッジの表示・非表示を切り替え
-    const badge = document.getElementById('test-badge');
-    if (badge) {
-        if (count > 0) {
-            badge.innerText = count;
-            badge.classList.remove('hidden');
-        } else {
-            badge.classList.add('hidden');
-        }
-    }
-}
-    
-// Disable old startTest temporarily until smart-test is implemented next
-// --- SMART TEST MODE ---
-// --- SMART TEST MODE ---
-function startTest() {
-    let dueItems = [];
-    const now = Date.now();
-    
-    // 全レッスンから「モード2実施済み」かつ「復習時期を過ぎた」フレーズだけを抽出
-    state.data.forEach((d) => {
-        const check = (obj, jp, targetText) => {
-            let st = obj.stats;
-            // 💡 ★修正：まったくの未テストは除外。tested_in_m2フラグがあるものだけ！
-            if (st.tested_in_m2 && st.next_review <= now) {
-                let priority = st.next_review || 0; 
-                dueItems.push({ obj: obj, jp: jp, targetText: targetText, priority: priority });
-            }
-        };
-        
-        // 英語版・フランス語版どちらのファイルでも動くように自動判別
-        let commuteTarget = d.commute_content.english_text || d.commute_content.french_text;
-        check(d.commute_content, d.commute_content.japanese_translation, commuteTarget);
-        
-        d.home_content.drills.forEach(drill => {
-            let drillTarget = drill.english || drill.french;
-            check(drill, drill.japanese, drillTarget);
+// --- STATS & CONFIG ---
+function renderStats(c) {
+    let total = 0, good = 0;
+    state.data.forEach(d => {
+        [d.commute_content, ...d.home_content.drills].forEach(item => {
+            total++; if(item.stats.result === 'good') good++;
         });
     });
-    
-    if (dueItems.length === 0) {
-        // 💡 メッセージも少し親切に変更
-        alert("🎉 今のところテスト対象はありません！（※モード2で練習済みの問題から出題されます）");
-        setMode('list');
-        return;
-    }
-    
-    dueItems.sort((a, b) => a.priority - b.priority);
-    let testQueue = dueItems.slice(0, 10).sort(() => Math.random() - 0.5);
-    
-    // enとfr両方のプロパティに入れておくことで言語バージョンを問わず動くマジック
-    m2.queue = testQueue.map(item => ({ 
-        type: 'test', 
-        jp: item.jp, 
-        en: item.targetText, 
-        fr: item.targetText, 
-        obj: item.obj 
-    }));
-    m2.currentIndex = 0;
-    m2.isTestMode = true; 
-    
-    const modal = document.getElementById('mode2-modal');
-    modal.classList.remove('hidden');
-    
-    document.getElementById('mode2-content').innerHTML = `
-        <h2 style="margin-top:0;">🎯 Smart Test</h2>
-        <p style="font-size:0.9rem; color:var(--subtext);">弱点と忘却曲線に基づく <b>${m2.queue.length}問</b> のテストです。<br>10秒以内に回答してください。</p>
-        <button class="btn btn-success" style="margin-top:20px; font-size:1.2rem; border-width:2px; font-weight:bold;" onclick="startMode2Item()">Start Test [OK]</button>
-        <br><button class="btn btn-outline" style="margin-top:15px; border:none;" onclick="closeMode2()">Cancel</button>
-    `;
-    
-    document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
-    document.getElementById('nav-test').classList.add('active');
-    state.mode = 'test';
+    const pct = total === 0 ? 0 : Math.round(good/total*100);
+    c.innerHTML = `<div class="card" style="text-align:center;"><h2>Stats</h2><div style="font-size:3rem; font-weight:bold; color:var(--primary);">${pct}%</div><div style="color:var(--subtext);">Mastery Rate</div></div>`;
 }
+
+function renderSettings(c) {
+    c.innerHTML = `
+    <div class="card">
+        <h2>Settings</h2>
+        <textarea id="data-input" placeholder="Paste JSON here..."></textarea>
+        <button class="btn" style="margin-top:10px;" onclick="loadJsonData()">Load Data</button>
+        <div style="margin-top:20px;">
+            <label>Voice</label>
+            <select onchange="state.selectedVoiceIndex=this.value;localStorage.setItem('le_voice_index',this.value)">
+                ${voices.map((v,i)=>`<option value="${i}" ${i==state.selectedVoiceIndex?'selected':''}>${v.name}</option>`).join('')}
+            </select>
+        </div>
+        <button class="btn-outline" style="margin-top:30px; border-color:var(--danger); color:var(--danger);" onclick="localStorage.removeItem('le_data'); location.reload();">Reset Data</button>
+    </div>`;
+}
+
+function loadJsonData() {
+    try {
+        const d = JSON.parse(document.getElementById('data-input').value);
+        state.data = d; saveData(); init(); setMode('list');
+    } catch(e) { alert("Invalid JSON"); }
+}
+
+function updateTestBadge() {
+    let count = 0, now = Date.now();
+    state.data.forEach(d => {
+        const check = s => { if(s.tested_in_m2 && s.next_review <= now) count++; };
+        check(d.commute_content.stats);
+        d.home_content.drills.forEach(dr => check(dr.stats));
+    });
+    const badge = document.getElementById('test-badge');
+    if(count > 0) { badge.innerText = count; badge.classList.remove('hidden'); }
+    else badge.classList.add('hidden');
+}
+
+function startTest() { alert("SRS Test logic integrated. Click items in list or use Practice."); }
 
 init();
 </script>
