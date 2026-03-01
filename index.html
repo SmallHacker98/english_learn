@@ -125,10 +125,7 @@
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
         navigator.serviceWorker.register('./sw.js').then(reg => {
-            // 定期チェック (1時間ごと)
             setInterval(() => { reg.update(); }, 60 * 60 * 1000);
-
-            // ① ダウンロード完了時の検知
             reg.addEventListener('updatefound', () => {
                 const newWorker = reg.installing;
                 newWorker.addEventListener('statechange', () => {
@@ -140,29 +137,26 @@ if ('serviceWorker' in navigator) {
         }).catch(err => console.log('SW registration failed: ', err));
     });
 
-    // ② 【追加】Android対策：裏側でシステムが強制的に切り替わった瞬間を検知
     navigator.serviceWorker.addEventListener('controllerchange', () => {
         showUpdateBanner();
     });
 }
 
 function showUpdateBanner() {
-    // 既にバナーが出ている場合は何もしない（重複防止）
     if (document.getElementById('update-banner')) return;
-    
     const banner = document.createElement('div');
     banner.id = 'update-banner';
     banner.innerHTML = `
         <div style="position:fixed; bottom:80px; left:20px; right:20px; background:var(--danger); color:white; padding:15px; border-radius:12px; display:flex; justify-content:space-between; align-items:center; z-index:9999; box-shadow:0 4px 15px rgba(0,0,0,0.3);">
             <span style="font-weight:bold; font-size: 0.9rem;">✨ 新バージョンがあります</span>
-            <button onclick="window.location.reload()" style="background:white; color:var(--danger); border:none; padding:8px 15px; border-radius:6px; font-weight:bold; cursor:pointer;">更新する</button>
+            <button onclick="window.location.reload()" style="background:white; color:var(--danger); border:none; padding:8px 15px; border-radius:6px; font-weight:bold; cursor:pointer;">更新</button>
         </div>
     `;
     document.body.appendChild(banner);
 }
 
 // --- CORE DATA & STATE ---
-const manifest = { "name": "Link English", "short_name": "LinkEng", "start_url": ".", "display": "standalone", "background_color": "#f8fafc", "theme_color": "#3b82f6", "icons": [{ "src": "data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🦉</text></svg>", "sizes": "512x512", "type": "image/svg+xml" }] };
+const manifest = { "name": "Link English", "short_name": "LinkEng", "start_url": ".", "display": "standalone", "background_color": "#f8fafc", "theme_color": "#3b82f6", "icons": [{ "src": "data:image/svg+xml,<svg xmlns=%22[http://www.w3.org/2000/svg%22](http://www.w3.org/2000/svg%22) viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🦉</text></svg>", "sizes": "512x512", "type": "image/svg+xml" }] };
 document.getElementById('my-manifest').setAttribute('href', 'data:application/manifest+json;charset=utf-8,' + encodeURIComponent(JSON.stringify(manifest)));
 
 let state = { 
@@ -178,7 +172,6 @@ function init() {
     const savedData = localStorage.getItem('le_data');
     state.data = savedData ? JSON.parse(savedData) : [];
     
-    // Statsパッチ (古いデータにもSRS用プロパティを付与)
     const patchStats = (item) => {
         if (!item.stats) item.stats = { last_score: null, result: null, interval: 0, next_review: 0, tested_in_m2: false };
         if (item.stats.tested_in_m2 === undefined) item.stats.tested_in_m2 = false;
@@ -192,9 +185,15 @@ function init() {
     const restore = (k, t) => { const v = localStorage.getItem(k); if(v) state[t] = (t==='theme' || t==='selectedVoiceIndex') ? v : parseFloat(v); };
     restore('le_theme', 'theme'); restore('le_voice_index', 'selectedVoiceIndex'); restore('le_voice_rate', 'voiceRate');
     
+    // 💡 修正：Config画面の設定値の復元
+    const pState = localStorage.getItem('le_prompt_state');
+    if(pState) {
+        const ps = JSON.parse(pState);
+        state.promptTopic = ps.topic; state.promptLevel = ps.level; state.promptQty = ps.qty;
+    }
+
     if (state.theme === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
     
-    // マイクの事前許可
     if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
         navigator.mediaDevices.getUserMedia({ audio: true }).then(s => s.getTracks().forEach(t => t.stop())).catch(e => console.warn("Mic auth:", e));
     }
@@ -346,7 +345,9 @@ function initMode2() {
     if(!recognition) return alert("ブラウザが音声認識に未対応です");
     const d = state.data[state.currentIndex];
     m2.queue = [{ type: 'commute', jp: d.commute_content.japanese_translation, en: d.commute_content.english_text, obj: d.commute_content }];
-    d.home_content.drills.forEach(drill => m2.queue.push({ type: 'drill', jp: drill.japanese, en: drill.english, obj: drill }));
+    if(d.home_content.drills) {
+        d.home_content.drills.forEach(drill => m2.queue.push({ type: 'drill', jp: drill.japanese, en: drill.english, obj: drill }));
+    }
     m2.queue.sort(() => Math.random() - 0.5);
     m2.currentIndex = 0;
     
@@ -354,7 +355,7 @@ function initMode2() {
     modal.classList.remove('hidden');
     document.getElementById('mode2-content').innerHTML = `
         <h2 style="margin-top:0;">🔥 Tension Mode</h2>
-        <p style="font-size:0.9rem; color:var(--subtext);">6 questions. Random order. 10 sec limit.<br>Speak immediately after the BEEP.</p>
+        <p style="font-size:0.9rem; color:var(--subtext);">${m2.queue.length} questions. Random order. 10 sec limit.<br>Speak immediately after the BEEP.</p>
         <button class="btn btn-danger-outline" style="margin-top:20px; font-size:1.2rem; border-width:2px; font-weight:bold;" onclick="startMode2Item()">Are you ready? [OK]</button>
         <br><button class="btn btn-outline" style="margin-top:15px; border:none;" onclick="closeMode2()">Cancel</button>
     `;
@@ -493,7 +494,7 @@ function render() {
 function renderList(c) {
     if (state.data.length === 0) { c.innerHTML = '<div style="text-align:center;padding:40px;color:var(--subtext)">No lessons.<br>Add some in Config!</div>'; return; }
     c.innerHTML = state.data.map((d, i) => {
-        let dots = [d.commute_content, ...d.home_content.drills].map(item => {
+        let dots = [d.commute_content, ...(d.home_content.drills || [])].map(item => {
             let color = '#e2e8f0';
             if (item.stats && item.stats.result === 'good') color = 'var(--success)';
             else if (item.stats && item.stats.result === 'retry') color = 'var(--accent)';
@@ -563,7 +564,7 @@ function renderListenContent(d) {
 
 function renderSpeakContent(d) {
     let items = [{ type: 'commute', jp: d.commute_content.japanese_translation, en: d.commute_content.english_text, stats: d.commute_content.stats, idx: -1 }];
-    d.home_content.drills.forEach((drill, i) => items.push({ type: 'drill', jp: drill.japanese, en: drill.english, stats: drill.stats, idx: i }));
+    if(d.home_content.drills) d.home_content.drills.forEach((drill, i) => items.push({ type: 'drill', jp: drill.japanese, en: drill.english, stats: drill.stats, idx: i }));
 
     let html = `
     <button class="btn btn-danger-outline" style="width:100%; margin-bottom:15px; font-weight:bold; border-width:2px;" onclick="initMode2()">🔥 Mode 2: Tension (Start)</button>
@@ -653,7 +654,13 @@ function updatePrompt() {
     const level = document.getElementById('p-level')?.value || "Intermediate";
     const qty = document.getElementById('p-qty')?.value || 3; 
 
-    // 💡 修正：JSONブロックの中に // コメントを入れないようにし、外で指示する
+    // 💡 修正：状態を保存（タブ切替時のリセット防止）
+    state.promptTopic = topic;
+    state.promptLevel = level;
+    state.promptQty = qty;
+    localStorage.setItem('le_prompt_state', JSON.stringify({topic, level, qty}));
+
+    // 💡 修正：JSONブロックの中に // コメントを入れない
     const p = `あなたは英語教材作成のプロです。以下の仕様で学習データを作成してください。
 ## 生成モード
 テーマ: ${topic}
@@ -701,10 +708,14 @@ function copyPrompt() {
 
 function loadJsonData() { 
     try { 
-        // 💡 修正：AIが出力した ```json や ``` のマークダウン記号を自動で取り除く
         let rawText = document.getElementById('data-input').value.trim();
-        rawText = rawText.replace(/^```(json)?/im, '').replace(/```$/im, '').trim();
-
+        // 💡 修正：より強力なJSON抽出（会話文が混ざっていても配列部分だけを抜く）
+        const startIdx = rawText.indexOf('[');
+        const endIdx = rawText.lastIndexOf(']');
+        if(startIdx !== -1 && endIdx !== -1) {
+            rawText = rawText.substring(startIdx, endIdx + 1);
+        }
+        
         const d = JSON.parse(rawText); 
         if (Array.isArray(d)) { 
             if (confirm('Add to existing?')) state.data = [...state.data, ...d]; else state.data = d; 
@@ -732,9 +743,9 @@ function renderSettings(c) {
             <div class="form-col">
                 <label>Level</label>
                 <select id="p-level" onchange="updatePrompt()">
-                    <option>Intermediate</option>
-                    <option>Advanced</option>
-                    <option>Beginner</option>
+                    <option ${state.promptLevel==='Intermediate'?'selected':''}>Intermediate</option>
+                    <option ${state.promptLevel==='Advanced'?'selected':''}>Advanced</option>
+                    <option ${state.promptLevel==='Beginner'?'selected':''}>Beginner</option>
                 </select>
             </div>
             <div class="form-col" style="flex:0 0 70px;">
