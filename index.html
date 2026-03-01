@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Link English v4.5 (BG Support)</title>
+    <title>Link English v4.6 (Full Integration)</title>
     
     <meta name="theme-color" content="#3b82f6">
     <meta name="mobile-web-app-capable" content="yes">
@@ -37,6 +37,7 @@
         .nav-item { flex: 1; padding: 12px; text-align: center; font-size: 0.7rem; color: var(--subtext); cursor: pointer; border-top: 3px solid transparent; position: relative;}
         .nav-item.active { color: var(--primary); border-top-color: var(--primary); font-weight: bold; }
         .nav-icon { display: block; font-size: 1.4rem; margin-bottom: 2px; }
+        .nav-badge { position: absolute; top: 4px; right: calc(50% - 22px); background: var(--danger); color: white; font-size: 0.65rem; font-weight: bold; padding: 2px 6px; border-radius: 10px; border: 2px solid var(--card); line-height: 1; z-index: 20; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
 
         main { flex: 1; overflow-y: auto; padding: 1rem; max-width: 600px; margin: 0 auto; width: 100%; box-sizing: border-box; }
 
@@ -88,13 +89,12 @@
         .score-chip { display:inline-block; padding: 4px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; margin-left:5px;}
         .sc-good { background: var(--status-done); color: var(--status-done-t); }
         .sc-bad { background: #fee2e2; color: #991b1b; }
-        .nav-badge { position: absolute; top: 4px; right: calc(50% - 22px); background: var(--danger); color: white; font-size: 0.65rem; font-weight: bold; padding: 2px 6px; border-radius: 10px; border: 2px solid var(--card); line-height: 1; z-index: 20; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
     </style>
 </head>
 <body>
 
 <header>
-    <div class="app-title">Link English v4.5</div>
+    <div class="app-title">Link English v4.6</div>
     <button class="theme-toggle" onclick="toggleTheme()">🌙</button>
 </header>
 
@@ -121,16 +121,14 @@
 </div>
 
 <script>
-
 // --- PWA UPDATE DETECTION ---
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
         navigator.serviceWorker.register('./sw.js').then(reg => {
-            // 新しいバージョンが見つかり、インストールされたらバナーを出す
+            setInterval(() => { reg.update(); }, 60 * 60 * 1000);
             reg.addEventListener('updatefound', () => {
                 const newWorker = reg.installing;
                 newWorker.addEventListener('statechange', () => {
-                    // 既に一度インストール済みの状態（controllerが存在する）で、新しいSWが入った場合
                     if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
                         showUpdateBanner();
                     }
@@ -138,49 +136,42 @@ if ('serviceWorker' in navigator) {
             });
         }).catch(err => console.log('SW registration failed: ', err));
     });
-
-    // 💡 裏側でService Workerが切り替わったことを検知する保険の処理
-    let refreshing = false;
-    navigator.serviceWorker.addEventListener('controllerchange', () => {
-        if (refreshing) return;
-        refreshing = true;
-        // 自動でリロードさせるか、バナーのボタンでリロードさせるか選べます。
-        // ここではバナー表示を優先するため、強制リロードはコメントアウトしています。
-        // window.location.reload(); 
-    });
 }
 
 function showUpdateBanner() {
-    // すでにバナーがあれば何もしない
     if (document.getElementById('update-banner')) return;
-
     const banner = document.createElement('div');
     banner.id = 'update-banner';
     banner.innerHTML = `
         <div style="position:fixed; bottom:80px; left:20px; right:20px; background:var(--danger); color:white; padding:15px; border-radius:12px; display:flex; justify-content:space-between; align-items:center; z-index:9999; box-shadow:0 4px 15px rgba(0,0,0,0.3);">
             <span style="font-weight:bold; font-size: 0.9rem;">✨ 新バージョンがあります</span>
-            <button onclick="window.location.reload()" style="background:white; color:var(--danger); border:none; padding:8px 15px; border-radius:6px; font-weight:bold; cursor:pointer;">更新する</button>
+            <button onclick="window.location.reload()" style="background:white; color:var(--danger); border:none; padding:8px 15px; border-radius:6px; font-weight:bold; cursor:pointer;">更新</button>
         </div>
     `;
     document.body.appendChild(banner);
 }
-    
+
 // --- CORE DATA & STATE ---
+const manifest = { "name": "Link English", "short_name": "LinkEng", "start_url": ".", "display": "standalone", "background_color": "#f8fafc", "theme_color": "#3b82f6", "icons": [{ "src": "data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🦉</text></svg>", "sizes": "512x512", "type": "image/svg+xml" }] };
+document.getElementById('my-manifest').setAttribute('href', 'data:application/manifest+json;charset=utf-8,' + encodeURIComponent(JSON.stringify(manifest)));
+
 let state = { 
     data: [], currentIndex: 0, mode: 'list', lessonTab: 'commute',
     theme: 'light', showText: false, selectedVoiceIndex: -1, voiceRate: 1.0, 
     isLooping: false, promptTopic: "Business", promptLevel: "Intermediate", promptQty: 3
 };
-let voices = [], recognition = null, silentAudio = null;
+let voices = [], recognition = null, silentAudio = null, audioCtx = null;
+let m2 = { queue: [], currentIndex: 0, timerId: null, timeLeft: 10, isRecording: false, currentTarget: "", currentStatsObj: null };
 
 // --- INITIALIZATION ---
 function init() {
     const savedData = localStorage.getItem('le_data');
     state.data = savedData ? JSON.parse(savedData) : [];
     
-    // Patch stats for older data
+    // Statsパッチ (古いデータにもSRS用プロパティを付与)
     const patchStats = (item) => {
         if (!item.stats) item.stats = { last_score: null, result: null, interval: 0, next_review: 0, tested_in_m2: false };
+        if (item.stats.tested_in_m2 === undefined) item.stats.tested_in_m2 = false;
     };
     state.data.forEach(d => { 
         if(!d.progress) d.progress = {listen:false, speak:false}; 
@@ -193,15 +184,17 @@ function init() {
     
     if (state.theme === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
     
-    // Mic Warmup
+    // マイクの事前許可
     if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-        navigator.mediaDevices.getUserMedia({ audio: true }).then(s => s.getTracks().forEach(t => t.stop())).catch(e => console.warn(e));
+        navigator.mediaDevices.getUserMedia({ audio: true }).then(s => s.getTracks().forEach(t => t.stop())).catch(e => console.warn("Mic auth:", e));
     }
 
     if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         recognition = new SpeechRecognition(); 
         recognition.lang = 'en-US';
+        recognition.interimResults = false;
+        recognition.continuous = false;
     }
     
     window.speechSynthesis.onvoiceschanged = loadVoices; loadVoices(); 
@@ -216,10 +209,17 @@ function loadVoices() {
     }
 }
 
+function playBeep() {
+    if(!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if(audioCtx.state === 'suspended') audioCtx.resume();
+    const osc = audioCtx.createOscillator();
+    osc.type = 'sine'; osc.frequency.setValueAtTime(880, audioCtx.currentTime); 
+    osc.connect(audioCtx.destination); osc.start(); osc.stop(audioCtx.currentTime + 0.15);
+}
+
 // --- BACKGROUND PLAYBACK HACK ---
 function enableBackgroundPlayback() {
     if (!silentAudio) {
-        // 1秒の無音wavデータ
         const silentSrc = "data:audio/wav;base64,UklGRigAAABXQVZFRm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=";
         silentAudio = new Audio(silentSrc);
         silentAudio.loop = true;
@@ -261,7 +261,7 @@ function toggleLoop() {
         stopAudio();
     } else { 
         state.isLooping = true; 
-        enableBackgroundPlayback(); // バックグラウンド維持開始
+        enableBackgroundPlayback();
         render(); 
         runRecursiveLoop();
     } 
@@ -270,28 +270,20 @@ function toggleLoop() {
 function runRecursiveLoop() {
     if (!state.isLooping) return;
     const text = state.data[state.currentIndex].commute_content.english_text;
-    
     speak(text, () => {
-        // 読み上げ終了後に3秒待機して次へ（バックグラウンドでもイベントは走りやすい）
-        if (state.isLooping) {
-            setTimeout(runRecursiveLoop, 3000);
-        }
+        if (state.isLooping) setTimeout(runRecursiveLoop, 3000);
     });
 }
 
 // --- SRS & SPEECH ANALYSIS ---
 function updateSRS(statsObj, resultStr, score) {
-    const now = Date.now();
-    const DAY = 24 * 60 * 60 * 1000;
+    const now = Date.now(), DAY = 24 * 60 * 60 * 1000;
     let currentInterval = statsObj.interval || 0;
     
-    if (resultStr === 'good') {
-        statsObj.interval = currentInterval === 0 ? 1 : currentInterval * 2;
-    } else if (resultStr === 'retry') {
-        statsObj.interval = 1;
-    } else { 
-        statsObj.interval = 0;
-    }
+    if (resultStr === 'good') statsObj.interval = currentInterval === 0 ? 1 : currentInterval * 2;
+    else if (resultStr === 'retry') statsObj.interval = 1;
+    else statsObj.interval = 0;
+    
     statsObj.next_review = now + (statsObj.interval * DAY);
     statsObj.result = resultStr;
     if (score !== undefined) statsObj.last_score = score;
@@ -314,17 +306,17 @@ function saveSelfEval(type, index, resultStr) {
     const d = state.data[state.currentIndex];
     let targetStats = (type === 'commute') ? d.commute_content.stats : d.home_content.drills[index].stats;
     updateSRS(targetStats, resultStr);
-    saveData();
-    render();
+    saveData(); render();
 }
 
 function startDictation(target, resId, btnId) {
-    if (!recognition) return alert("Browser not supported");
+    if (!recognition) return alert("ブラウザが音声認識に未対応です");
     const btn = document.getElementById(btnId); 
     const res = document.getElementById(resId);
     btn.classList.add('listening'); res.innerHTML = "Listening..."; res.classList.remove('hidden');
     
-    recognition.start();
+    try { recognition.start(); } catch(e) { console.warn(e); }
+    
     recognition.onresult = (e) => {
         const input = e.results[0][0].transcript;
         const feedback = analyzeSpeech(target, input); 
@@ -333,6 +325,145 @@ function startDictation(target, resId, btnId) {
         if (document.getElementById(ansId)) document.getElementById(ansId).classList.remove('hidden');
     };
     recognition.onend = () => btn.classList.remove('listening');
+    recognition.onerror = (e) => {
+        res.innerHTML = `<div style="color:var(--danger); font-size:0.8rem;">エラー: ${e.error}</div>`;
+        btn.classList.remove('listening');
+    };
+}
+
+// --- MODE 2: TENSION / SMART TEST LOGIC ---
+function initMode2() {
+    if(!recognition) return alert("ブラウザが音声認識に未対応です");
+    const d = state.data[state.currentIndex];
+    m2.queue = [{ type: 'commute', jp: d.commute_content.japanese_translation, en: d.commute_content.english_text, obj: d.commute_content }];
+    d.home_content.drills.forEach(drill => m2.queue.push({ type: 'drill', jp: drill.japanese, en: drill.english, obj: drill }));
+    m2.queue.sort(() => Math.random() - 0.5);
+    m2.currentIndex = 0;
+    
+    const modal = document.getElementById('mode2-modal');
+    modal.classList.remove('hidden');
+    document.getElementById('mode2-content').innerHTML = `
+        <h2 style="margin-top:0;">🔥 Tension Mode</h2>
+        <p style="font-size:0.9rem; color:var(--subtext);">6 questions. Random order. 10 sec limit.<br>Speak immediately after the BEEP.</p>
+        <button class="btn btn-danger-outline" style="margin-top:20px; font-size:1.2rem; border-width:2px; font-weight:bold;" onclick="startMode2Item()">Are you ready? [OK]</button>
+        <br><button class="btn btn-outline" style="margin-top:15px; border:none;" onclick="closeMode2()">Cancel</button>
+    `;
+}
+
+function startTest() {
+    if(!recognition) return alert("ブラウザが音声認識に未対応です");
+    let dueItems = [];
+    const now = Date.now();
+    
+    state.data.forEach((d) => {
+        const check = (obj, jp, targetText) => {
+            let st = obj.stats;
+            if (st && st.tested_in_m2 && st.next_review <= now) {
+                dueItems.push({ obj: obj, jp: jp, en: targetText, priority: st.next_review || 0 });
+            }
+        };
+        check(d.commute_content, d.commute_content.japanese_translation, d.commute_content.english_text);
+        if(d.home_content.drills) {
+            d.home_content.drills.forEach(drill => check(drill, drill.japanese, drill.english));
+        }
+    });
+    
+    if (dueItems.length === 0) {
+        alert("🎉 今のところテスト対象はありません！（※Mode 2を実施した問題が対象になります）");
+        setMode('list'); return;
+    }
+    
+    dueItems.sort((a, b) => a.priority - b.priority);
+    m2.queue = dueItems.slice(0, 10).sort(() => Math.random() - 0.5);
+    m2.currentIndex = 0;
+    
+    document.getElementById('mode2-modal').classList.remove('hidden');
+    document.getElementById('mode2-content').innerHTML = `
+        <h2 style="margin-top:0;">🎯 Smart Test</h2>
+        <p style="font-size:0.9rem; color:var(--subtext);">弱点と忘却曲線に基づく <b>${m2.queue.length}問</b> のテストです。<br>10秒以内に回答してください。</p>
+        <button class="btn btn-success" style="margin-top:20px; font-size:1.2rem; border-width:2px; font-weight:bold;" onclick="startMode2Item()">Start Test [OK]</button>
+        <br><button class="btn btn-outline" style="margin-top:15px; border:none;" onclick="closeMode2()">Cancel</button>
+    `;
+    
+    document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+    document.getElementById('nav-test').classList.add('active');
+    state.mode = 'test';
+}
+
+function closeMode2() {
+    if(m2.isRecording) recognition.stop();
+    clearTimeout(m2.timerId);
+    document.getElementById('mode2-modal').classList.add('hidden');
+    if(state.mode === 'test') setMode('list'); else render();
+}
+
+function startMode2Item() {
+    if(m2.currentIndex >= m2.queue.length) {
+        document.getElementById('mode2-content').innerHTML = `<h2>🎉 Complete!</h2><button class="btn" onclick="closeMode2()">Close</button>`;
+        return;
+    }
+    const item = m2.queue[m2.currentIndex];
+    m2.currentTarget = item.en; m2.currentStatsObj = item.obj; m2.timeLeft = 10;
+    
+    document.getElementById('mode2-content').innerHTML = `
+        <div style="font-weight:bold; color:var(--danger); margin-bottom:10px;">Question ${m2.currentIndex + 1} / ${m2.queue.length}</div>
+        <div style="font-size:1.3rem; font-weight:bold; margin-bottom:10px;">${item.jp}</div>
+        <div style="font-size:2rem;">🎙️</div>
+        <div class="timer-bar-container"><div class="timer-bar" id="m2-timer-bar"></div></div>
+        <div id="m2-status" style="font-size:0.8rem; color:var(--danger); font-weight:bold;">Listening...</div>
+    `;
+
+    playBeep();
+    setTimeout(() => {
+        try { recognition.start(); m2.isRecording = true; } catch(e){}
+        m2.timerId = setInterval(() => {
+            m2.timeLeft -= 0.1;
+            const bar = document.getElementById('m2-timer-bar');
+            if(bar) bar.style.width = `${(m2.timeLeft / 10) * 100}%`;
+            if (m2.timeLeft <= 0) {
+                clearInterval(m2.timerId);
+                if(m2.isRecording) recognition.stop();
+                handleMode2Result(""); 
+            }
+        }, 100);
+    }, 200);
+
+    recognition.onresult = (e) => { clearInterval(m2.timerId); m2.isRecording = false; handleMode2Result(e.results[0][0].transcript); };
+    recognition.onerror = (e) => { if(e.error === 'no-speech') { clearInterval(m2.timerId); handleMode2Result(""); } };
+    recognition.onend = () => m2.isRecording = false;
+}
+
+function handleMode2Result(input) {
+    clearInterval(m2.timerId);
+    if(m2.isRecording) { recognition.stop(); m2.isRecording = false; }
+
+    const isTimeout = (input.trim() === "");
+    let feedback = "", score = 0, resStr = 'nogood';
+
+    if (isTimeout) {
+        feedback = `<div style="color:var(--danger); font-weight:bold; font-size:1.2rem; margin-bottom:10px;">⏱️ Time Out / Silence</div>`;
+    } else {
+        const analysis = analyzeSpeech(m2.currentTarget, input);
+        score = analysis.score; feedback = analysis.html;
+        if(score === 100) resStr = 'good'; else if(score >= 80) resStr = 'retry';
+    }
+    
+    updateSRS(m2.currentStatsObj.stats, resStr, score);
+    m2.currentStatsObj.stats.tested_in_m2 = true;
+    saveData();
+
+    document.getElementById('mode2-content').innerHTML = `
+        <div style="font-weight:bold; color:var(--subtext); margin-bottom:5px;">Result (${m2.currentIndex + 1}/${m2.queue.length})</div>
+        ${feedback}
+        <div style="margin-top:15px; padding:10px; background:var(--bg); border-radius:8px; border:1px solid var(--border);">
+            <div style="font-size:0.8rem; color:var(--subtext);">Target:</div>
+            <div style="font-weight:bold; color:var(--primary); font-size:1.1rem;">${m2.currentTarget}</div>
+        </div>
+        <div style="display:flex; gap:10px; margin-top:20px;">
+            <button class="btn btn-outline" style="flex:1" onclick="closeMode2()">Stop</button>
+            <button class="btn btn-danger-outline" style="flex:2; font-weight:bold;" onclick="m2.currentIndex++; startMode2Item()">Next ➔</button>
+        </div>
+    `;
 }
 
 // --- RENDERING ---
@@ -350,7 +481,7 @@ function render() {
 }
 
 function renderList(c) {
-    if (state.data.length === 0) { c.innerHTML = '<div style="text-align:center;padding:40px;color:var(--subtext)">No lessons.</div>'; return; }
+    if (state.data.length === 0) { c.innerHTML = '<div style="text-align:center;padding:40px;color:var(--subtext)">No lessons.<br>Add some in Config!</div>'; return; }
     c.innerHTML = state.data.map((d, i) => {
         let dots = [d.commute_content, ...d.home_content.drills].map(item => {
             let color = '#e2e8f0';
@@ -368,7 +499,7 @@ function renderList(c) {
                     <span class="level-tag">${d.level}</span>
                 </div>
                 <div style="display:flex; gap:15px; font-size:0.8rem;">
-                    <div style="color:${d.progress.listen?'var(--success)':'var(--subtext)'}">${d.progress.listen?'🎧 ✅':'🎧 ⬜'}</div>
+                    <div style="color:${d.progress.listen?'var(--success)':'var(--subtext)'}; font-weight:bold;">${d.progress.listen?'🎧 ✅':'🎧 ⬜'}</div>
                     <div style="display:flex; gap:4px; align-items:center;">🗣️ ${dots}</div>
                 </div>
             </div>
@@ -385,6 +516,10 @@ function renderLesson(c) {
     <div class="lesson-tabs"><div class="l-tab ${isListen?'active':''}" onclick="setLessonTab('commute')">🎧 Commute</div><div class="l-tab ${!isListen?'active':''}" onclick="setLessonTab('practice')">🗣️ Practice</div></div>
     <div class="card" style="padding:10px;">
         ${isListen ? renderListenContent(d) : renderSpeakContent(d)}
+    </div>
+    <div style="display:flex;justify-content:space-between;margin-top:20px">
+        <button class="btn-outline" style="width:45%" onclick="if(state.currentIndex>0) openLesson(state.currentIndex-1)" ${state.currentIndex===0?'disabled':''}>← Prev</button>
+        <button class="btn-outline" style="width:45%" onclick="if(state.currentIndex<state.data.length-1) openLesson(state.currentIndex+1)" ${state.currentIndex===state.data.length-1?'disabled':''}>Next →</button>
     </div>`;
 }
 
@@ -394,17 +529,24 @@ function renderListenContent(d) {
         <button class="btn" onclick="speak('${d.commute_content.english_text.replace(/'/g, "\\'")}')">▶️ Play</button>
         <button class="btn ${state.isLooping?'btn-accent':'btn-outline'}" onclick="toggleLoop()">${state.isLooping?'🔁 Stop':'🔁 Loop'}</button>
     </div>
-    <div style="margin-top:15px; background:var(--bg); padding:10px; border-radius:8px;">
-        <div style="font-size:0.8rem; color:var(--subtext); font-weight:bold;">Speed: ${state.voiceRate}x</div>
-        <input type="range" min="0.5" max="2.0" step="0.1" value="${state.voiceRate}" oninput="state.voiceRate=parseFloat(this.value);localStorage.setItem('le_voice_rate',this.value);render()">
+    <div style="margin-top:15px; background:var(--bg); padding:10px; border-radius:8px; border:1px solid var(--border);">
+        <div style="font-size:0.8rem; color:var(--subtext); font-weight:bold; margin-bottom:5px;">Speed: <span id="commute-rate-val">${Number(state.voiceRate).toFixed(1)}</span>x</div>
+        <div style="display:flex; align-items:center;">
+            <span style="font-size:1.2rem;">🐢</span>
+            <input type="range" min="0.5" max="2.0" step="0.1" value="${state.voiceRate}" 
+                oninput="state.voiceRate=parseFloat(this.value); localStorage.setItem('le_voice_rate', this.value); document.getElementById('commute-rate-val').innerText=Number(this.value).toFixed(1);" style="flex:1; margin:0 10px;">
+            <span style="font-size:1.2rem;">🐇</span>
+        </div>
     </div>
-    <button class="btn ${d.progress.listen ? 'btn-success' : 'btn-outline'}" style="margin-top:15px;" onclick="toggleProgress('listen')">
-        ${d.progress.listen ? '✅ Listen Done' : '🎧 Mark as Done'}
+    <button class="btn ${d.progress.listen ? 'btn-success' : 'btn-outline'}" style="margin-top:15px; font-weight:bold;" onclick="toggleProgress('listen')">
+        ${d.progress.listen ? '✅ Listen Done' : '🎧 Mark as Listen Done'}
     </button>
     <div id="txt-area" class="${state.showText?'':'hidden'}">
         <div class="text-en">${d.commute_content.english_text}</div>
         <div class="text-jp">${d.commute_content.japanese_translation}</div>
-        <div class="chunk-view">${d.commute_content.chunks.split('/').map(c=>`<span>${c}</span><span class="chunk-sep">/</span>`).join('')}</div>
+        <div class="chunk-view" style="margin-top:10px; border-top:1px dashed var(--border); padding-top:10px;">
+            ${d.commute_content.chunks.split('/').map(c=>`<span>${c}</span><span class="chunk-sep">/</span>`).join('')}
+        </div>
     </div>
     <button class="btn-outline" style="margin-top:15px;" onclick="state.showText=!state.showText;render()">${state.showText?'🙈 Hide':'👁️ Show'} Text</button>`;
 }
@@ -413,26 +555,30 @@ function renderSpeakContent(d) {
     let items = [{ type: 'commute', jp: d.commute_content.japanese_translation, en: d.commute_content.english_text, stats: d.commute_content.stats, idx: -1 }];
     d.home_content.drills.forEach((drill, i) => items.push({ type: 'drill', jp: drill.japanese, en: drill.english, stats: drill.stats, idx: i }));
 
-    let html = `<button class="btn btn-danger-outline" style="margin-bottom:15px;" onclick="initMode2()">🔥 Mode 2: Tension (Start)</button>`;
+    let html = `
+    <button class="btn btn-danger-outline" style="width:100%; margin-bottom:15px; font-weight:bold; border-width:2px;" onclick="initMode2()">🔥 Mode 2: Tension (Start)</button>
+    <div style="font-size:0.8rem; color:var(--subtext); text-align:center; margin-bottom:15px;">Mode 1: My Pace (Self Eval)</div>
+    `;
+
     items.forEach((item, i) => {
         let badge = item.stats.result === 'good' ? `<span class="score-chip sc-good">✅ Good</span>` : 
                     item.stats.result === 'retry' ? `<span class="score-chip" style="background:var(--accent);color:white;">🔄 Retry</span>` : 
                     item.stats.result === 'nogood' ? `<span class="score-chip sc-bad">❌ No Good</span>` : "";
         html += `
         <div class="drill-card">
-            <div style="font-weight:bold; font-size:0.9rem;">${i+1}. ${item.jp} ${badge}</div>
-            <div style="display:flex; gap:10px; margin-top:8px;">
-                <button class="btn btn-mic" id="btn-mic-${i}" onclick="startDictation('${item.en.replace(/'/g,"\\'")}', 'res-${i}', 'btn-mic-${i}')" style="flex:1">🎙️ Speak</button>
-                <button class="btn btn-outline" style="flex:1" onclick="document.getElementById('ans-${i}').classList.remove('hidden')">👁️ Ans</button>
-                <button class="btn btn-accent" onclick="speak('${item.en.replace(/'/g,"\\'")}')" style="width:45px;">🔊</button>
+            <div style="font-weight:bold; font-size:0.9rem; margin-bottom:8px;">${i+1}. ${item.jp} ${badge}</div>
+            <div style="display:flex; gap:10px; margin-bottom:10px;">
+                <button class="btn btn-mic" id="btn-m1-mic-${i}" onclick="startDictation('${item.en.replace(/'/g,"\\'")}', 'm1-res-${i}', 'btn-m1-mic-${i}')" style="flex:1">🎙️ Speak</button>
+                <button class="btn btn-outline" style="flex:1" onclick="document.getElementById('m1-ans-${i}').classList.remove('hidden')">👁️ Answer</button>
+                <button class="btn btn-accent" onclick="speak('${item.en.replace(/'/g,"\\'")}')" style="width:50px; padding:0;">🔊</button>
             </div>
-            <div id="res-${i}" class="hidden score-box"></div>
-            <div id="ans-${i}" class="hidden" style="margin-top:10px;">
-                <div style="color:var(--primary); font-weight:bold;">${item.en}</div>
-                <div style="display:flex; gap:5px; margin-top:5px;">
-                    <button class="btn btn-success" style="padding:5px; font-size:0.75rem;" onclick="saveSelfEval('${item.type}', ${item.idx}, 'good')">Good</button>
-                    <button class="btn btn-accent" style="padding:5px; font-size:0.75rem;" onclick="saveSelfEval('${item.type}', ${item.idx}, 'retry')">Retry</button>
-                    <button class="btn btn-danger-outline" style="padding:5px; font-size:0.75rem;" onclick="saveSelfEval('${item.type}', ${item.idx}, 'nogood')">No</button>
+            <div id="m1-res-${i}" class="hidden score-box"></div>
+            <div id="m1-ans-${i}" class="hidden" style="margin-top:8px;">
+                <div style="color:var(--primary); font-weight:bold; font-size:1.1rem; margin-bottom:10px;">${item.en}</div>
+                <div style="display:flex; gap:5px;">
+                    <button class="btn btn-success" style="padding:6px; font-size:0.8rem;" onclick="saveSelfEval('${item.type}', ${item.idx}, 'good')">🟢 Good</button>
+                    <button class="btn btn-accent" style="padding:6px; font-size:0.8rem;" onclick="saveSelfEval('${item.type}', ${item.idx}, 'retry')">🟡 Retry</button>
+                    <button class="btn btn-danger-outline" style="padding:6px; font-size:0.8rem;" onclick="saveSelfEval('${item.type}', ${item.idx}, 'nogood')">🔴 No Good</button>
                 </div>
             </div>
         </div>`;
@@ -440,110 +586,184 @@ function renderSpeakContent(d) {
     return html;
 }
 
-// --- MODE 2: TENSION LOGIC (Simplified for integration) ---
-let m2 = { queue: [], currentIndex: 0, timerId: null, timeLeft: 10, isRecording: false };
-
-function initMode2() {
-    const d = state.data[state.currentIndex];
-    m2.queue = [{ jp: d.commute_content.japanese_translation, en: d.commute_content.english_text, obj: d.commute_content }];
-    d.home_content.drills.forEach(drill => m2.queue.push({ jp: drill.japanese, en: drill.english, obj: drill }));
-    m2.queue.sort(() => Math.random() - 0.5);
-    m2.currentIndex = 0;
-    document.getElementById('mode2-modal').classList.remove('hidden');
-    startMode2Item();
-}
-
-function startMode2Item() {
-    if(m2.currentIndex >= m2.queue.length) {
-        document.getElementById('mode2-content').innerHTML = `<h2>Complete!</h2><button class="btn" onclick="document.getElementById('mode2-modal').classList.add('hidden');render()">Close</button>`;
-        return;
-    }
-    const item = m2.queue[m2.currentIndex];
-    m2.timeLeft = 10;
-    document.getElementById('mode2-content').innerHTML = `
-        <div style="font-weight:bold; color:var(--danger);">Question ${m2.currentIndex + 1}</div>
-        <div style="font-size:1.3rem; font-weight:bold; margin:15px 0;">${item.jp}</div>
-        <div class="timer-bar-container"><div class="timer-bar" id="m2-bar"></div></div>
-        <button class="btn btn-danger" onclick="m2CaptureSpeech()">🎙️ Speak Now</button>
-    `;
-    m2.timerId = setInterval(() => {
-        m2.timeLeft -= 0.1;
-        document.getElementById('m2-bar').style.width = (m2.timeLeft/10*100)+'%';
-        if(m2.timeLeft <= 0) { clearInterval(m2.timerId); m2ShowResult(""); }
-    }, 100);
-}
-
-function m2CaptureSpeech() {
-    clearInterval(m2.timerId);
-    if (!recognition) return m2ShowResult("");
-    recognition.start();
-    recognition.onresult = (e) => m2ShowResult(e.results[0][0].transcript);
-    recognition.onerror = () => m2ShowResult("");
-}
-
-function m2ShowResult(input) {
-    const item = m2.queue[m2.currentIndex];
-    const analysis = analyzeSpeech(item.en, input);
-    let resStr = analysis.score === 100 ? 'good' : (analysis.score >= 80 ? 'retry' : 'nogood');
-    updateSRS(item.obj.stats, resStr, analysis.score);
-    item.obj.stats.tested_in_m2 = true;
-    saveData();
-
-    document.getElementById('mode2-content').innerHTML = `
-        <div style="margin-bottom:10px;">${analysis.html}</div>
-        <div style="font-weight:bold; color:var(--primary);">${item.en}</div>
-        <button class="btn" style="margin-top:20px;" onclick="m2.currentIndex++; startMode2Item()">Next</button>
-    `;
-}
-
-// --- STATS & CONFIG ---
 function renderStats(c) {
-    let total = 0, good = 0;
-    state.data.forEach(d => {
-        [d.commute_content, ...d.home_content.drills].forEach(item => {
-            total++; if(item.stats.result === 'good') good++;
-        });
+    if (state.data.length === 0) { c.innerHTML = '<div style="text-align:center;padding:40px;color:var(--subtext)">データがありません。</div>'; return; }
+
+    let total = 0, good = 0, retry = 0, nogood = 0, untested = 0;
+    let weakPhrases = [];
+
+    state.data.forEach((d, lessonIndex) => {
+        const checkStat = (item, jp, en) => {
+            total++;
+            if (item && item.stats && item.stats.result) {
+                const res = item.stats.result;
+                if (res === 'good') good++;
+                else if (res === 'retry') { retry++; weakPhrases.push({jp, en, res, lessonIndex}); }
+                else if (res === 'nogood') { nogood++; weakPhrases.push({jp, en, res, lessonIndex}); }
+            } else untested++;
+        };
+        checkStat(d.commute_content, d.commute_content.japanese_translation, d.commute_content.english_text);
+        if(d.home_content.drills) d.home_content.drills.forEach(drill => checkStat(drill, drill.japanese, drill.english));
     });
-    const pct = total === 0 ? 0 : Math.round(good/total*100);
-    c.innerHTML = `<div class="card" style="text-align:center;"><h2>Stats</h2><div style="font-size:3rem; font-weight:bold; color:var(--primary);">${pct}%</div><div style="color:var(--subtext);">Mastery Rate</div></div>`;
+
+    const goodPct = total === 0 ? 0 : Math.round((good / total) * 100);
+    let html = `
+    <h2 style="margin-top:0;">📊 Learning Stats</h2>
+    <div class="card" style="text-align:center; padding:20px;">
+        <div style="font-size:3rem; font-weight:bold; color:var(--primary); line-height:1;">${goodPct}<span style="font-size:1.5rem">%</span></div>
+        <div style="color:var(--subtext); font-size:0.9rem; margin-bottom:15px;">Mastery Rate (定着率)</div>
+        <div style="display:flex; justify-content:space-around; align-items:center; background:var(--bg); padding:10px; border-radius:8px;">
+            <div style="text-align:center;"><div style="font-size:1.2rem;">${good}</div><span class="score-chip sc-good">✅ Good</span></div>
+            <div style="text-align:center;"><div style="font-size:1.2rem;">${retry}</div><span class="score-chip" style="background:var(--accent);color:white;">🔄 Retry</span></div>
+            <div style="text-align:center;"><div style="font-size:1.2rem;">${nogood}</div><span class="score-chip sc-bad">❌ No Good</span></div>
+        </div>
+        <div style="font-size:0.8rem; color:var(--subtext); margin-top:10px;">未テスト: ${untested} / 全${total}フレーズ</div>
+    </div>`;
+
+    if (weakPhrases.length > 0) {
+        html += `<h3 style="margin-top:25px; border-bottom:2px solid var(--danger); display:inline-block;">🔥 Needs Work (弱点: ${weakPhrases.length})</h3>`;
+        weakPhrases.reverse().slice(0, 10).forEach(wp => {
+            const badge = wp.res === 'nogood' ? '❌ No Good' : '🔄 Retry';
+            html += `
+            <div class="card" style="padding:15px; margin-bottom:10px; border-left:4px solid ${wp.res === 'nogood' ? 'var(--danger)' : 'var(--accent)'};" onclick="openLesson(${wp.lessonIndex})">
+                <div style="font-size:0.8rem; color:var(--subtext); margin-bottom:5px;">${wp.jp}</div>
+                <div style="font-weight:bold; font-size:1rem;">${wp.en}</div>
+                <div style="margin-top:8px; font-size:0.8rem; font-weight:bold; color:${wp.res === 'nogood' ? 'var(--danger)' : 'var(--accent)'};">${badge}</div>
+            </div>`;
+        });
+    } else if (good > 0) {
+        html += `<div class="card" style="text-align:center; padding:30px; color:var(--success); font-weight:bold; font-size:1.1rem;">🎉 弱点はありません！完璧です！</div>`;
+    }
+    c.innerHTML = html;
+}
+
+// --- CONFIG & PROMPT BUILDER ---
+function updatePrompt() {
+    const topic = document.getElementById('p-topic')?.value || "Business";
+    const level = document.getElementById('p-level')?.value || "Intermediate";
+    const qty = document.getElementById('p-qty')?.value || 3; 
+
+    const p = `あなたは英語教材作成のプロです。以下の仕様で学習データを作成してください。
+## 生成モード
+テーマ: ${topic}
+レベル: ${level}
+作成数: ${qty}セット（1セットにつき、メイン例文1つ＋関連ドリル5つ）
+自然な表現で作成してください。
+
+## 【絶対遵守ルール】
+1. 出力は以下のJSON配列形式のみ。
+2. english_text と chunks の連結結果は完全一致させること。
+3. 各セットの "drills" 配列の中身は必ず5個作成すること。
+\`\`\`json
+[
+  {
+    "id": "gen_${Date.now()}", 
+    "category": "${topic}",
+    "level": "${level}",
+    "progress": { "listen": false, "speak": false },
+    "commute_content": { 
+      "english_text": "...", "japanese_translation": "...", "chunks": "... / ...", "summary": "...", "vocabulary": [] 
+    },
+    "home_content": { 
+      "pattern_focus": "...", "pattern_explanation": "...", 
+      "drills": [
+        {"japanese": "...", "english": "..."},
+        {"japanese": "...", "english": "..."},
+        {"japanese": "...", "english": "..."},
+        {"japanese": "...", "english": "..."},
+        {"japanese": "...", "english": "..."}
+      ] 
+    }
+  }
+]
+\`\`\``;
+    const area = document.getElementById('p-area');
+    if (area) area.value = p;
+}
+
+function copyPrompt() { 
+    updatePrompt(); 
+    navigator.clipboard.writeText(document.getElementById('p-area').value).then(() => alert('Copied!')); 
+}
+
+function loadJsonData() { 
+    try { 
+        const d = JSON.parse(document.getElementById('data-input').value); 
+        if (Array.isArray(d)) { 
+            if (confirm('Add to existing?')) state.data = [...state.data, ...d]; else state.data = d; 
+            saveData(); init(); 
+            document.getElementById('data-input').value = ''; 
+            setMode('list'); 
+        }
+    } catch(e) { alert('Invalid JSON'); } 
 }
 
 function renderSettings(c) {
+    const voiceOpts = voices.map((v,i)=>`<option value="${i}" ${i==state.selectedVoiceIndex?'selected':''}>${v.name}</option>`).join('');
     c.innerHTML = `
     <div class="card">
-        <h2>Settings</h2>
-        <textarea id="data-input" placeholder="Paste JSON here..."></textarea>
-        <button class="btn" style="margin-top:10px;" onclick="loadJsonData()">Load Data</button>
+        <h2>🤖 AI Prompt Builder v4.6</h2>
+        <label>Topic</label>
+        <input type="text" id="p-topic" value="${state.promptTopic}" oninput="updatePrompt()">
+        
+        <div class="form-row" style="margin-top:10px;">
+            <div class="form-col">
+                <label>Level</label>
+                <select id="p-level" onchange="updatePrompt()">
+                    <option>Intermediate</option>
+                    <option>Advanced</option>
+                    <option>Beginner</option>
+                </select>
+            </div>
+            <div class="form-col" style="flex:0 0 70px;">
+                <label>Qty</label>
+                <input type="number" id="p-qty" value="${state.promptQty || 3}" oninput="updatePrompt()">
+            </div>
+        </div>
+        
+        <textarea id="p-area" style="font-size:0.6rem; height:120px; margin-top:15px;" readonly></textarea>
+        <button class="btn btn-outline" onclick="copyPrompt()">📋 Copy Prompt</button>
+    </div>
+    
+    <div class="card">
+        <h2>Data & Voice</h2>
+        <textarea id="data-input" placeholder="Paste JSON from Gemini here..."></textarea>
+        <button class="btn" onclick="loadJsonData()" style="margin-top:10px;">Load Data</button>
+        
         <div style="margin-top:20px;">
             <label>Voice</label>
-            <select onchange="state.selectedVoiceIndex=this.value;localStorage.setItem('le_voice_index',this.value)">
-                ${voices.map((v,i)=>`<option value="${i}" ${i==state.selectedVoiceIndex?'selected':''}>${v.name}</option>`).join('')}
-            </select>
+            <select onchange="state.selectedVoiceIndex=this.value;localStorage.setItem('le_voice_index',this.value)">${voiceOpts}</select>
         </div>
-        <button class="btn-outline" style="margin-top:30px; border-color:var(--danger); color:var(--danger);" onclick="localStorage.removeItem('le_data'); location.reload();">Reset Data</button>
-    </div>`;
-}
 
-function loadJsonData() {
-    try {
-        const d = JSON.parse(document.getElementById('data-input').value);
-        state.data = d; saveData(); init(); setMode('list');
-    } catch(e) { alert("Invalid JSON"); }
+        <div style="margin-top:20px;">
+            <label>Speed: <span id="rate-val">${Number(state.voiceRate).toFixed(1)}</span>x</label>
+            <div style="display:flex; align-items:center;">
+                <span style="font-size:1.2rem;">🐢</span>
+                <input type="range" min="0.5" max="2.0" step="0.1" value="${state.voiceRate}" 
+                    oninput="state.voiceRate=parseFloat(this.value); localStorage.setItem('le_voice_rate', this.value); document.getElementById('rate-val').innerText=Number(this.value).toFixed(1);">
+                <span style="font-size:1.2rem;">🐇</span>
+            </div>
+        </div>
+        
+        <button class="btn-outline" onclick="if(confirm('本当にすべて削除しますか？')){localStorage.removeItem('le_data'); location.reload();}" style="margin-top:30px; border-color:var(--danger); color:var(--danger);">⚠️ Reset All Data</button>
+    </div>`;
+    
+    setTimeout(updatePrompt, 50);
 }
 
 function updateTestBadge() {
     let count = 0, now = Date.now();
     state.data.forEach(d => {
-        const check = s => { if(s.tested_in_m2 && s.next_review <= now) count++; };
+        const check = s => { if(s && s.tested_in_m2 && s.next_review <= now) count++; };
         check(d.commute_content.stats);
-        d.home_content.drills.forEach(dr => check(dr.stats));
+        if(d.home_content.drills) d.home_content.drills.forEach(dr => check(dr.stats));
     });
     const badge = document.getElementById('test-badge');
-    if(count > 0) { badge.innerText = count; badge.classList.remove('hidden'); }
-    else badge.classList.add('hidden');
+    if(badge) {
+        if(count > 0) { badge.innerText = count; badge.classList.remove('hidden'); }
+        else badge.classList.add('hidden');
+    }
 }
-
-function startTest() { alert("SRS Test logic integrated. Click items in list or use Practice."); }
 
 init();
 </script>
