@@ -125,7 +125,10 @@
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
         navigator.serviceWorker.register('./sw.js').then(reg => {
+            // 定期チェック (1時間ごと)
             setInterval(() => { reg.update(); }, 60 * 60 * 1000);
+
+            // ① ダウンロード完了時の検知
             reg.addEventListener('updatefound', () => {
                 const newWorker = reg.installing;
                 newWorker.addEventListener('statechange', () => {
@@ -136,16 +139,23 @@ if ('serviceWorker' in navigator) {
             });
         }).catch(err => console.log('SW registration failed: ', err));
     });
+
+    // ② 【追加】Android対策：裏側でシステムが強制的に切り替わった瞬間を検知
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+        showUpdateBanner();
+    });
 }
 
 function showUpdateBanner() {
+    // 既にバナーが出ている場合は何もしない（重複防止）
     if (document.getElementById('update-banner')) return;
+    
     const banner = document.createElement('div');
     banner.id = 'update-banner';
     banner.innerHTML = `
         <div style="position:fixed; bottom:80px; left:20px; right:20px; background:var(--danger); color:white; padding:15px; border-radius:12px; display:flex; justify-content:space-between; align-items:center; z-index:9999; box-shadow:0 4px 15px rgba(0,0,0,0.3);">
             <span style="font-weight:bold; font-size: 0.9rem;">✨ 新バージョンがあります</span>
-            <button onclick="window.location.reload()" style="background:white; color:var(--danger); border:none; padding:8px 15px; border-radius:6px; font-weight:bold; cursor:pointer;">更新</button>
+            <button onclick="window.location.reload()" style="background:white; color:var(--danger); border:none; padding:8px 15px; border-radius:6px; font-weight:bold; cursor:pointer;">更新する</button>
         </div>
     `;
     document.body.appendChild(banner);
