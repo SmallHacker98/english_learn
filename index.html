@@ -643,6 +643,7 @@ function updatePrompt() {
     const level = document.getElementById('p-level')?.value || "Intermediate";
     const qty = document.getElementById('p-qty')?.value || 3; 
 
+    // 💡 修正：JSONブロックの中に // コメントを入れないようにし、外で指示する
     const p = `あなたは英語教材作成のプロです。以下の仕様で学習データを作成してください。
 ## 生成モード
 テーマ: ${topic}
@@ -651,13 +652,15 @@ function updatePrompt() {
 自然な表現で作成してください。
 
 ## 【絶対遵守ルール】
-1. 出力は以下のJSON配列形式のみ。
+1. 出力は以下のJSON配列形式のみ。解説やマークダウン以外のテキストは絶対に含めないでください。
 2. english_text と chunks の連結結果は完全一致させること。
 3. 各セットの "drills" 配列の中身は必ず5個作成すること。
+4. 以下のJSONオブジェクトを必ず ${qty} セット分繰り返した「配列」を出力すること。
+
 \`\`\`json
 [
   {
-    "id": "gen_${Date.now()}", 
+    "id": "gen_123456789", 
     "category": "${topic}",
     "level": "${level}",
     "progress": { "listen": false, "speak": false },
@@ -688,14 +691,23 @@ function copyPrompt() {
 
 function loadJsonData() { 
     try { 
-        const d = JSON.parse(document.getElementById('data-input').value); 
+        // 💡 修正：AIが出力した ```json や ``` のマークダウン記号を自動で取り除く
+        let rawText = document.getElementById('data-input').value.trim();
+        rawText = rawText.replace(/^```(json)?/im, '').replace(/```$/im, '').trim();
+
+        const d = JSON.parse(rawText); 
         if (Array.isArray(d)) { 
             if (confirm('Add to existing?')) state.data = [...state.data, ...d]; else state.data = d; 
             saveData(); init(); 
             document.getElementById('data-input').value = ''; 
             setMode('list'); 
+        } else {
+            alert('データが配列形式ではありません。');
         }
-    } catch(e) { alert('Invalid JSON'); } 
+    } catch(e) { 
+        alert('Invalid JSON: データ形式が正しくありません。\n余計なテキストが含まれていないか確認してください。'); 
+        console.error(e);
+    } 
 }
 
 function renderSettings(c) {
