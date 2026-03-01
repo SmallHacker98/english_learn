@@ -1,5 +1,5 @@
-// sw.js (Link English v3.9.7)
-const CACHE_NAME = 'link-english-v3.9.7';
+// sw.js (Link English v4.5)
+const CACHE_NAME = 'link-english-v4.5'; // ← ここを書き換える！
 const ASSETS = [
     './',
     './index.html'
@@ -7,7 +7,7 @@ const ASSETS = [
 
 // インストール時にキャッシュを作成
 self.addEventListener('install', (e) => {
-    self.skipWaiting(); // ← これを追加！待機せずにすぐ最新版を適用する
+    self.skipWaiting(); // 待機せずにすぐ最新版を適用する
     e.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(ASSETS)));
 });
 
@@ -16,7 +16,6 @@ self.addEventListener('activate', (e) => {
     e.waitUntil(
         caches.keys().then(keys => Promise.all(
             keys.map(key => {
-                // 今回のバージョン名と違うキャッシュはすべて削除
                 if (key !== CACHE_NAME) return caches.delete(key);
             })
         ))
