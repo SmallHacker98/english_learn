@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Link English v4.6 (Full Integration)</title>
+    <title>Link English v5.0 (Concept-to-Speech)</title>
     
     <meta name="theme-color" content="#3b82f6">
     <meta name="mobile-web-app-capable" content="yes">
@@ -94,7 +94,7 @@
 <body>
 
 <header>
-    <div class="app-title">Link English v4.6</div>
+    <div class="app-title">Link English v5.0</div>
     <button class="theme-toggle" onclick="toggleTheme()">🌙</button>
 </header>
 
@@ -156,7 +156,7 @@ function showUpdateBanner() {
 }
 
 // --- CORE DATA & STATE ---
-const manifest = { "name": "Link English", "short_name": "LinkEng", "start_url": ".", "display": "standalone", "background_color": "#f8fafc", "theme_color": "#3b82f6", "icons": [{ "src": "data:image/svg+xml,<svg xmlns=%22[http://www.w3.org/2000/svg%22](http://www.w3.org/2000/svg%22) viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🦉</text></svg>", "sizes": "512x512", "type": "image/svg+xml" }] };
+const manifest = { "name": "Link English", "short_name": "LinkEng", "start_url": ".", "display": "standalone", "background_color": "#f8fafc", "theme_color": "#3b82f6", "icons": [{ "src": "data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🦉</text></svg>", "sizes": "512x512", "type": "image/svg+xml" }] };
 document.getElementById('my-manifest').setAttribute('href', 'data:application/manifest+json;charset=utf-8,' + encodeURIComponent(JSON.stringify(manifest)));
 
 let state = { 
@@ -165,7 +165,7 @@ let state = {
     isLooping: false, promptTopic: "Business", promptLevel: "Intermediate", promptQty: 3
 };
 let voices = [], recognition = null, silentAudio = null, audioCtx = null;
-let m2 = { queue: [], currentIndex: 0, timerId: null, timeLeft: 10, isRecording: false, currentTarget: "", currentStatsObj: null };
+let m2 = { queue: [], currentIndex: 0, currentStep: 1, timerId: null, timeLeft: 10, isRecording: false, currentTarget: "", currentStatsObj: null, isTestMode: false };
 
 // --- INITIALIZATION ---
 function init() {
@@ -175,7 +175,17 @@ function init() {
     const patchStats = (item) => {
         if (!item.stats) item.stats = { last_score: null, result: null, interval: 0, next_review: 0, tested_in_m2: false };
         if (item.stats.tested_in_m2 === undefined) item.stats.tested_in_m2 = false;
+        
+        // 💡 古いデータへのフォールバック（エラー防止）
+        let eng = item.english_text || item.english || "";
+        let jp = item.japanese_translation || item.japanese || "";
+        if (!item.situation_en) item.situation_en = `(Translate): ${jp}`;
+        if (!item.keywords) {
+            let words = eng.split(' ').map(w => w.replace(/[.,!?]/g, ''));
+            item.keywords = words.filter(w => w.length > 3).slice(0, 3);
+        }
     };
+
     state.data.forEach(d => { 
         if(!d.progress) d.progress = {listen:false, speak:false}; 
         patchStats(d.commute_content);
@@ -185,7 +195,6 @@ function init() {
     const restore = (k, t) => { const v = localStorage.getItem(k); if(v) state[t] = (t==='theme' || t==='selectedVoiceIndex') ? v : parseFloat(v); };
     restore('le_theme', 'theme'); restore('le_voice_index', 'selectedVoiceIndex'); restore('le_voice_rate', 'voiceRate');
     
-    // 💡 修正：Config画面の設定値の復元
     const pState = localStorage.getItem('le_prompt_state');
     if(pState) {
         const ps = JSON.parse(pState);
@@ -235,10 +244,7 @@ function enableBackgroundPlayback() {
     }
     silentAudio.play().catch(e => console.log("Silent audio blocked", e));
 }
-
-function disableBackgroundPlayback() {
-    if (silentAudio) silentAudio.pause();
-}
+function disableBackgroundPlayback() { if (silentAudio) silentAudio.pause(); }
 
 // --- NAVIGATION & UTILS ---
 function setMode(m) { state.mode = m; stopAudio(); render(); }
@@ -310,7 +316,7 @@ function analyzeSpeech(target, input) {
     return { score, html: `<div style="font-weight:bold; color:${score===100?'var(--success)':'var(--danger)'}">Score: ${score}%</div>${html}` };
 }
 
-// --- MODE 1: SELF EVAL ---
+// --- MODE 1: SELF EVAL (Level 1) ---
 function saveSelfEval(type, index, resultStr) {
     const d = state.data[state.currentIndex];
     let targetStats = (type === 'commute') ? d.commute_content.stats : d.home_content.drills[index].stats;
@@ -340,7 +346,8 @@ function startDictation(target, resId, btnId) {
     };
 }
 
-// --- MODE 2: TENSION / SMART TEST LOGIC ---
+// --- NEW! MODE 2 & 3: TENSION / SMART TEST (Level 2 & 3) ---
+
 function initMode2() {
     if(!recognition) return alert("ブラウザが音声認識に未対応です");
     const d = state.data[state.currentIndex];
@@ -348,15 +355,22 @@ function initMode2() {
     if(d.home_content.drills) {
         d.home_content.drills.forEach(drill => m2.queue.push({ type: 'drill', jp: drill.japanese, en: drill.english, obj: drill }));
     }
-    m2.queue.sort(() => Math.random() - 0.5);
+    m2.isTestMode = false;
     m2.currentIndex = 0;
+    m2.currentStep = 1; // 1:Read, 2:Listen, 3:Concept
     
     const modal = document.getElementById('mode2-modal');
     modal.classList.remove('hidden');
     document.getElementById('mode2-content').innerHTML = `
-        <h2 style="margin-top:0;">🔥 Tension Mode</h2>
-        <p style="font-size:0.9rem; color:var(--subtext);">${m2.queue.length} questions. Random order. 10 sec limit.<br>Speak immediately after the BEEP.</p>
-        <button class="btn btn-danger-outline" style="margin-top:20px; font-size:1.2rem; border-width:2px; font-weight:bold;" onclick="startMode2Item()">Are you ready? [OK]</button>
+        <h2 style="margin-top:0;">⚡ Level 2: Tension Mode</h2>
+        <div style="font-size:0.9rem; color:var(--subtext); text-align:left; background:var(--bg); padding:15px; border-radius:8px;">
+            <b>${m2.queue.length} Phrases. 3 Steps each.</b><br><br>
+            <b>Step 1:</b> 👁️ Read & Speak<br>
+            <b>Step 2:</b> 🎧 Listen & Repeat<br>
+            <b>Step 3:</b> 💡 Concept to Speech<br>
+            (10 sec limit per step)
+        </div>
+        <button class="btn btn-danger-outline" style="margin-top:20px; font-size:1.2rem; border-width:2px; font-weight:bold;" onclick="startMode2Item()">Ready? [START]</button>
         <br><button class="btn btn-outline" style="margin-top:15px; border:none;" onclick="closeMode2()">Cancel</button>
     `;
 }
@@ -380,18 +394,20 @@ function startTest() {
     });
     
     if (dueItems.length === 0) {
-        alert("🎉 今のところテスト対象はありません！（※Mode 2を実施した問題が対象になります）");
+        alert("🎉 今のところテスト対象はありません！（※Level 2をクリアした問題が対象になります）");
         setMode('list'); return;
     }
     
     dueItems.sort((a, b) => a.priority - b.priority);
     m2.queue = dueItems.slice(0, 10).sort(() => Math.random() - 0.5);
+    m2.isTestMode = true;
     m2.currentIndex = 0;
+    m2.currentStep = 3; // Test is Concept to Speech ONLY (Step 3)
     
     document.getElementById('mode2-modal').classList.remove('hidden');
     document.getElementById('mode2-content').innerHTML = `
-        <h2 style="margin-top:0;">🎯 Smart Test</h2>
-        <p style="font-size:0.9rem; color:var(--subtext);">弱点と忘却曲線に基づく <b>${m2.queue.length}問</b> のテストです。<br>10秒以内に回答してください。</p>
+        <h2 style="margin-top:0;">🎯 Level 3: Smart Test</h2>
+        <p style="font-size:0.9rem; color:var(--subtext);">弱点と忘却曲線に基づく <b>${m2.queue.length}問</b> のテスト。<br>英語の「Situation」を読んで瞬時に発話せよ！</p>
         <button class="btn btn-success" style="margin-top:20px; font-size:1.2rem; border-width:2px; font-weight:bold;" onclick="startMode2Item()">Start Test [OK]</button>
         <br><button class="btn btn-outline" style="margin-top:15px; border:none;" onclick="closeMode2()">Cancel</button>
     `;
@@ -408,36 +424,83 @@ function closeMode2() {
     if(state.mode === 'test') setMode('list'); else render();
 }
 
+// 💡 Hint機能（グローバル関数）
+window.showHint = function() {
+    document.getElementById('m2-hint-box').classList.add('hidden');
+    document.getElementById('m2-keywords').classList.remove('hidden');
+}
+
+function startMicAndTimer() {
+    try { recognition.start(); m2.isRecording = true; } catch(e){}
+    m2.timerId = setInterval(() => {
+        m2.timeLeft -= 0.1;
+        const bar = document.getElementById('m2-timer-bar');
+        if(bar) bar.style.width = `${(m2.timeLeft / 10) * 100}%`;
+        if (m2.timeLeft <= 0) {
+            clearInterval(m2.timerId);
+            if(m2.isRecording) recognition.stop();
+            handleMode2Result(""); 
+        }
+    }, 100);
+}
+
 function startMode2Item() {
     if(m2.currentIndex >= m2.queue.length) {
-        document.getElementById('mode2-content').innerHTML = `<h2>🎉 Complete!</h2><button class="btn" onclick="closeMode2()">Close</button>`;
+        document.getElementById('mode2-content').innerHTML = `<h2>🎉 Complete!</h2><button class="btn" onclick="closeMode2()">Close & Review</button>`;
         return;
     }
-    const item = m2.queue[m2.currentIndex];
-    m2.currentTarget = item.en; m2.currentStatsObj = item.obj; m2.timeLeft = 10;
     
+    const item = m2.queue[m2.currentIndex];
+    const obj = item.obj;
+    m2.currentTarget = item.en; m2.currentStatsObj = obj; m2.timeLeft = 10;
+    
+    let stepTitle = m2.isTestMode ? `🎯 Smart Test (${m2.currentIndex + 1} / ${m2.queue.length})` : `⚡ Item ${m2.currentIndex + 1}/${m2.queue.length} - Step ${m2.currentStep}/3`;
+    let contentHtml = "";
+
+    if (m2.currentStep === 1) {
+        contentHtml = `
+            <div style="font-size:0.9rem; color:var(--subtext); margin-bottom:5px;">👁️ Read & Speak</div>
+            <div style="font-size:1.3rem; font-weight:bold; margin-bottom:15px; color:var(--primary);">${item.en}</div>
+        `;
+    } else if (m2.currentStep === 2) {
+        contentHtml = `
+            <div style="font-size:0.9rem; color:var(--subtext); margin-bottom:5px;">🎧 Listen & Repeat</div>
+            <div style="font-size:1.5rem; font-weight:bold; margin-bottom:15px;">🔊 (Listen...)</div>
+        `;
+    } else if (m2.currentStep === 3) {
+        contentHtml = `
+            <div style="font-size:0.9rem; color:var(--subtext); margin-bottom:5px;">💡 Concept to Speech</div>
+            <div style="font-size:1.1rem; font-weight:bold; margin-bottom:15px; border-left: 4px solid var(--primary); padding-left: 10px; text-align: left; line-height: 1.4;">
+                <span style="font-size:0.8rem; color:var(--primary); font-weight:bold;">[Situation]</span><br>
+                ${obj.situation_en}
+            </div>
+            <div id="m2-hint-box" style="margin-bottom:15px;">
+                <button class="btn btn-outline" style="padding: 6px 12px; font-size: 0.8rem;" onclick="showHint()">🔍 Keyword Hint</button>
+            </div>
+            <div id="m2-keywords" class="hidden" style="font-size:1rem; color:var(--accent); font-weight:bold; margin-bottom:15px;">
+                [ ${(obj.keywords || []).join(' / ')} ]
+            </div>
+        `;
+    }
+
     document.getElementById('mode2-content').innerHTML = `
-        <div style="font-weight:bold; color:var(--danger); margin-bottom:10px;">Question ${m2.currentIndex + 1} / ${m2.queue.length}</div>
-        <div style="font-size:1.3rem; font-weight:bold; margin-bottom:10px;">${item.jp}</div>
-        <div style="font-size:2rem;">🎙️</div>
+        <div style="font-weight:bold; color:var(--danger); margin-bottom:15px;">${stepTitle}</div>
+        ${contentHtml}
         <div class="timer-bar-container"><div class="timer-bar" id="m2-timer-bar"></div></div>
-        <div id="m2-status" style="font-size:0.8rem; color:var(--danger); font-weight:bold;">Listening...</div>
+        <div id="m2-status" style="font-size:0.8rem; color:var(--danger); font-weight:bold;">${m2.currentStep === 2 ? 'Playing Audio...' : 'Listening...'}</div>
     `;
 
-    playBeep();
-    setTimeout(() => {
-        try { recognition.start(); m2.isRecording = true; } catch(e){}
-        m2.timerId = setInterval(() => {
-            m2.timeLeft -= 0.1;
-            const bar = document.getElementById('m2-timer-bar');
-            if(bar) bar.style.width = `${(m2.timeLeft / 10) * 100}%`;
-            if (m2.timeLeft <= 0) {
-                clearInterval(m2.timerId);
-                if(m2.isRecording) recognition.stop();
-                handleMode2Result(""); 
-            }
-        }, 100);
-    }, 200);
+    // Step2の場合は、音声を再生し終わってからマイクを起動する
+    if (m2.currentStep === 2) {
+        speak(item.en, () => {
+            document.getElementById('m2-status').innerText = "Listening...";
+            playBeep();
+            setTimeout(startMicAndTimer, 200);
+        });
+    } else {
+        playBeep();
+        setTimeout(startMicAndTimer, 300);
+    }
 
     recognition.onresult = (e) => { clearInterval(m2.timerId); m2.isRecording = false; handleMode2Result(e.results[0][0].transcript); };
     recognition.onerror = (e) => { if(e.error === 'no-speech') { clearInterval(m2.timerId); handleMode2Result(""); } };
@@ -459,20 +522,42 @@ function handleMode2Result(input) {
         if(score === 100) resStr = 'good'; else if(score >= 80) resStr = 'retry';
     }
     
-    updateSRS(m2.currentStatsObj.stats, resStr, score);
-    m2.currentStatsObj.stats.tested_in_m2 = true;
-    saveData();
+    let buttonsHtml = "";
+    
+    // Step 3 または Test モードの時だけ、SRSデータとして正式記録する
+    if (m2.isTestMode || m2.currentStep === 3) {
+        updateSRS(m2.currentStatsObj.stats, resStr, score);
+        if (!m2.isTestMode) m2.currentStatsObj.stats.tested_in_m2 = true; // Level 2クリアの証
+        saveData();
+        
+        buttonsHtml = `
+            <button class="btn btn-outline" style="flex:1" onclick="closeMode2()">Stop</button>
+            <button class="btn btn-danger-outline" style="flex:2; font-weight:bold;" onclick="m2.currentIndex++; m2.currentStep=1; startMode2Item()">Next Phrase ➔</button>
+        `;
+    } else {
+        // Step 1 & 2 の場合 (練習フェーズ)
+        if (score >= 80) {
+            buttonsHtml = `
+                <button class="btn btn-outline" style="flex:1" onclick="closeMode2()">Stop</button>
+                <button class="btn" style="flex:2; font-weight:bold;" onclick="m2.currentStep++; startMode2Item()">Next Step ➔</button>
+            `;
+        } else {
+            buttonsHtml = `
+                <button class="btn btn-outline" style="flex:1" onclick="m2.currentIndex++; m2.currentStep=1; startMode2Item()">Skip Phrase</button>
+                <button class="btn btn-accent" style="flex:2; font-weight:bold;" onclick="startMode2Item()">Retry Step ${m2.currentStep} ↺</button>
+            `;
+        }
+    }
 
     document.getElementById('mode2-content').innerHTML = `
-        <div style="font-weight:bold; color:var(--subtext); margin-bottom:5px;">Result (${m2.currentIndex + 1}/${m2.queue.length})</div>
+        <div style="font-weight:bold; color:var(--subtext); margin-bottom:5px;">Result</div>
         ${feedback}
         <div style="margin-top:15px; padding:10px; background:var(--bg); border-radius:8px; border:1px solid var(--border);">
             <div style="font-size:0.8rem; color:var(--subtext);">Target:</div>
             <div style="font-weight:bold; color:var(--primary); font-size:1.1rem;">${m2.currentTarget}</div>
         </div>
         <div style="display:flex; gap:10px; margin-top:20px;">
-            <button class="btn btn-outline" style="flex:1" onclick="closeMode2()">Stop</button>
-            <button class="btn btn-danger-outline" style="flex:2; font-weight:bold;" onclick="m2.currentIndex++; startMode2Item()">Next ➔</button>
+            ${buttonsHtml}
         </div>
     `;
 }
@@ -567,8 +652,8 @@ function renderSpeakContent(d) {
     if(d.home_content.drills) d.home_content.drills.forEach((drill, i) => items.push({ type: 'drill', jp: drill.japanese, en: drill.english, stats: drill.stats, idx: i }));
 
     let html = `
-    <button class="btn btn-danger-outline" style="width:100%; margin-bottom:15px; font-weight:bold; border-width:2px;" onclick="initMode2()">🔥 Mode 2: Tension (Start)</button>
-    <div style="font-size:0.8rem; color:var(--subtext); text-align:center; margin-bottom:15px;">Mode 1: My Pace (Self Eval)</div>
+    <button class="btn btn-danger-outline" style="width:100%; margin-bottom:15px; font-weight:bold; border-width:2px;" onclick="initMode2()">⚡ Level 2: Tension Mode (Start)</button>
+    <div style="font-size:0.8rem; color:var(--subtext); text-align:center; margin-bottom:15px;">Level 1: My Pace (Self Eval)</div>
     `;
 
     items.forEach((item, i) => {
@@ -654,13 +739,10 @@ function updatePrompt() {
     const level = document.getElementById('p-level')?.value || "Intermediate";
     const qty = document.getElementById('p-qty')?.value || 3; 
 
-    // 💡 修正：状態を保存（タブ切替時のリセット防止）
-    state.promptTopic = topic;
-    state.promptLevel = level;
-    state.promptQty = qty;
+    state.promptTopic = topic; state.promptLevel = level; state.promptQty = qty;
     localStorage.setItem('le_prompt_state', JSON.stringify({topic, level, qty}));
 
-    // 💡 修正：JSONブロックの中に // コメントを入れない
+    // 💡 v5.0向け：新プロンプト (situation_en と keywords を追加)
     const p = `あなたは英語教材作成のプロです。以下の仕様で学習データを作成してください。
 ## 生成モード
 テーマ: ${topic}
@@ -669,10 +751,11 @@ function updatePrompt() {
 自然な表現で作成してください。
 
 ## 【絶対遵守ルール】
-1. 出力は以下のJSON配列形式のみ。解説やマークダウン以外のテキストは絶対に含めないでください。
+1. 出力は以下のJSON配列形式のみ。解説やマークダウン以外のテキストは絶対に含めない。
 2. english_text と chunks の連結結果は完全一致させること。
-3. 各セットの "drills" 配列の中身は必ず5個作成すること。
-4. 以下のJSONオブジェクトを必ず ${qty} セット分繰り返した「配列」を出力すること。
+3. "drills" 配列の中身は必ず5個作成すること。
+4. "situation_en"は、その英語を発するべき状況を「英語」で説明すること（例: You are declining an invitation.）
+5. "keywords"は、発話のヒントになる英単語を「配列」で2〜3個入れること。
 
 \`\`\`json
 [
@@ -682,16 +765,16 @@ function updatePrompt() {
     "level": "${level}",
     "progress": { "listen": false, "speak": false },
     "commute_content": { 
-      "english_text": "...", "japanese_translation": "...", "chunks": "... / ...", "summary": "...", "vocabulary": [] 
+      "english_text": "...", "japanese_translation": "...", "chunks": "... / ...", "summary": "...", 
+      "situation_en": "You are ...", "keywords": ["keyword1", "keyword2"]
     },
     "home_content": { 
-      "pattern_focus": "...", "pattern_explanation": "...", 
       "drills": [
-        {"japanese": "...", "english": "..."},
-        {"japanese": "...", "english": "..."},
-        {"japanese": "...", "english": "..."},
-        {"japanese": "...", "english": "..."},
-        {"japanese": "...", "english": "..."}
+        {"japanese": "...", "english": "...", "situation_en": "...", "keywords": ["...", "..."]},
+        {"japanese": "...", "english": "...", "situation_en": "...", "keywords": ["...", "..."]},
+        {"japanese": "...", "english": "...", "situation_en": "...", "keywords": ["...", "..."]},
+        {"japanese": "...", "english": "...", "situation_en": "...", "keywords": ["...", "..."]},
+        {"japanese": "...", "english": "...", "situation_en": "...", "keywords": ["...", "..."]}
       ] 
     }
   }
@@ -709,7 +792,6 @@ function copyPrompt() {
 function loadJsonData() { 
     try { 
         let rawText = document.getElementById('data-input').value.trim();
-        // 💡 修正：より強力なJSON抽出（会話文が混ざっていても配列部分だけを抜く）
         const startIdx = rawText.indexOf('[');
         const endIdx = rawText.lastIndexOf(']');
         if(startIdx !== -1 && endIdx !== -1) {
@@ -735,7 +817,7 @@ function renderSettings(c) {
     const voiceOpts = voices.map((v,i)=>`<option value="${i}" ${i==state.selectedVoiceIndex?'selected':''}>${v.name}</option>`).join('');
     c.innerHTML = `
     <div class="card">
-        <h2>🤖 AI Prompt Builder v4.6</h2>
+        <h2>🤖 AI Prompt Builder v5.0</h2>
         <label>Topic</label>
         <input type="text" id="p-topic" value="${state.promptTopic}" oninput="updatePrompt()">
         
