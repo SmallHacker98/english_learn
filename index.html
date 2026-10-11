@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Link English v5.0 (Concept-to-Speech)</title>
+    <title>Link English v5.4 (Concept-to-Speech)</title>
     
     <meta name="theme-color" content="#3b82f6">
     <meta name="mobile-web-app-capable" content="yes">
@@ -79,6 +79,12 @@
         textarea, input[type=text], input[type=number], select { width: 100%; padding: 8px; border-radius: 6px; background: var(--bg); color: var(--text); border: 1px solid var(--border); box-sizing: border-box; }
         textarea { height: 80px; resize: vertical; }
 
+        .chip-row { display: flex; gap: 6px; overflow-x: auto; margin-bottom: 10px; padding-bottom: 2px; }
+        .chip { flex: 0 0 auto; width: auto; padding: 5px 11px; border-radius: 999px; border: 1px solid var(--border); background: var(--card); color: var(--text); font-size: 0.8rem; cursor: pointer; }
+        .chip-on { background: var(--primary); color: #fff; border-color: var(--primary); }
+        .status-tag { font-size: 0.7rem; padding: 2px 7px; border-radius: 10px; margin-left: 6px; font-weight: bold; }
+        .st-done { background: var(--success); color: #fff; } .st-doing { background: var(--bg); color: var(--primary); border: 1px solid var(--primary); } .st-due { background: var(--danger); color: #fff; }
+        .cat-Other { background: var(--bg); color: var(--subtext); border: 1px solid var(--border); }
         .hidden { display: none !important; }
         @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.6; } 100% { opacity: 1; } }
 
@@ -94,7 +100,7 @@
 <body>
 
 <header>
-    <div class="app-title">Link English v5.0</div>
+    <div class="app-title">Link English v5.4</div>
     <button class="theme-toggle" onclick="toggleTheme()">🌙</button>
 </header>
 
@@ -107,6 +113,9 @@
     <div class="nav-item" id="nav-test" onclick="startTest()">
         <span class="nav-icon">🎯</span>Test
         <span id="test-badge" class="nav-badge hidden">0</span>
+    </div>
+    <div class="nav-item" id="nav-talk" onclick="setMode('talk')">
+        <span class="nav-icon">💬</span>Talk
     </div>
     <div class="nav-item" id="nav-stats" onclick="setMode('stats')">
         <span class="nav-icon">📊</span>Stats
@@ -162,15 +171,28 @@ document.getElementById('my-manifest').setAttribute('href', 'data:application/ma
 let state = { 
     data: [], currentIndex: 0, mode: 'list', lessonTab: 'commute',
     theme: 'light', showText: false, selectedVoiceIndex: -1, voiceRate: 1.0, 
-    isLooping: false, promptTopic: "Business", promptLevel: "Intermediate", promptQty: 3
+    promptCategory: 'Business', isLooping: false, loopAll: false, loopIdx: 0, loopCur: 0, promptTopic: "Business", promptLevel: "Intermediate", promptQty: 3, log: [],
+    listFilter: 'all', listSort: 'order', listQuery: '', visible: [],
+    dialogs: [], dlgIndex: 0, talkSecs: 10, talkShowText: false,
+    dlgScenario: '', dlgLevel: 'Intermediate', dlgTurns: 8, dlgQty: 2
 };
 let voices = [], recognition = null, silentAudio = null, audioCtx = null;
-let m2 = { queue: [], currentIndex: 0, currentStep: 1, timerId: null, timeLeft: 10, isRecording: false, currentTarget: "", currentStatsObj: null, isTestMode: false };
+let m2 = { queue: [], currentIndex: 0, currentStep: 1, timerId: null, timeLeft: 10, isRecording: false, currentTarget: "", currentStatsObj: null, isTestMode: false, micStartAt: 0, speechAt: 0, hintUsed: false, resolved: false };
 
 // --- INITIALIZATION ---
 function init() {
     const savedData = localStorage.getItem('le_data');
     state.data = savedData ? JSON.parse(savedData) : [];
+    try {
+        const dg = JSON.parse(localStorage.getItem('le_dialogs') || '[]');
+        state.dialogs = (Array.isArray(dg) ? dg : []).filter(d => validateDialog(d).length === 0).map(normalizeDialog);
+    } catch (e) { state.dialogs = []; }
+    try {
+        const up = JSON.parse(localStorage.getItem('le_ui_prefs') || '{}');
+        ['listFilter', 'listSort', 'listQuery', 'loopAll', 'talkSecs', 'talkShowText', 'dlgScenario', 'dlgLevel', 'dlgTurns', 'dlgQty'].forEach(k => { if (up[k] !== undefined) state[k] = up[k]; });
+    } catch (e) {}
+    try { const lg = JSON.parse(localStorage.getItem('le_log') || '[]'); state.log = Array.isArray(lg) ? lg : []; } catch(e) { state.log = []; }
+    if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
     
     const patchStats = (item) => {
         if (!item.stats) item.stats = { last_score: null, result: null, interval: 0, next_review: 0, tested_in_m2: false };
@@ -188,6 +210,7 @@ function init() {
 
     state.data.forEach(d => { 
         if(!d.progress) d.progress = {listen:false, speak:false}; 
+        if(!d.home_content) d.home_content = {};
         patchStats(d.commute_content);
         if(d.home_content.drills) d.home_content.drills.forEach(patchStats);
     });
@@ -198,7 +221,7 @@ function init() {
     const pState = localStorage.getItem('le_prompt_state');
     if(pState) {
         const ps = JSON.parse(pState);
-        state.promptTopic = ps.topic; state.promptLevel = ps.level; state.promptQty = ps.qty;
+        state.promptTopic = ps.topic; state.promptLevel = ps.level; state.promptQty = ps.qty; if (ps.category) state.promptCategory = ps.category;
     }
 
     if (state.theme === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
@@ -235,20 +258,52 @@ function playBeep() {
     osc.connect(audioCtx.destination); osc.start(); osc.stop(audioCtx.currentTime + 0.15);
 }
 
-// --- BACKGROUND PLAYBACK HACK ---
-function enableBackgroundPlayback() {
-    if (!silentAudio) {
-        const silentSrc = "data:audio/wav;base64,UklGRigAAABXQVZFRm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=";
-        silentAudio = new Audio(silentSrc);
-        silentAudio.loop = true;
-    }
-    silentAudio.play().catch(e => console.log("Silent audio blocked", e));
+// --- BACKGROUND PLAYBACK (v5.3) ---
+// 旧版の無音データは長さ0で、すぐ終わるため「再生中」と見なされていなかった。実データのある無音WAVを作って流し、MediaSessionも登録する。
+let silentUrl = null;
+function makeSilentWavUrl() {
+    if (silentUrl) return silentUrl;
+    const sr = 8000, n = sr * 2, buf = new ArrayBuffer(44 + n), v = new DataView(buf);
+    const w = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+    w(0, 'RIFF'); v.setUint32(4, 36 + n, true); w(8, 'WAVE'); w(12, 'fmt '); v.setUint32(16, 16, true);
+    v.setUint16(20, 1, true); v.setUint16(22, 1, true); v.setUint32(24, sr, true); v.setUint32(28, sr, true);
+    v.setUint16(32, 1, true); v.setUint16(34, 8, true); w(36, 'data'); v.setUint32(40, n, true);
+    for (let i = 0; i < n; i++) v.setUint8(44 + i, 128);
+    silentUrl = URL.createObjectURL(new Blob([buf], { type: 'audio/wav' }));
+    return silentUrl;
 }
-function disableBackgroundPlayback() { if (silentAudio) silentAudio.pause(); }
+function enableBackgroundPlayback() {
+    if (!silentAudio) { silentAudio = new Audio(makeSilentWavUrl()); silentAudio.loop = true; }
+    silentAudio.play().then(setupMediaSession).catch(e => console.log('Silent audio blocked', e));
+}
+function disableBackgroundPlayback() {
+    if (silentAudio) silentAudio.pause();
+    if ('mediaSession' in navigator) { try { navigator.mediaSession.playbackState = 'none'; } catch (e) {} }
+}
+function setupMediaSession() {
+    if (!('mediaSession' in navigator)) return;
+    try {
+        if (!navigator.mediaSession.metadata) navigator.mediaSession.metadata = new MediaMetadata({ title: 'Link English', artist: 'Commute loop', album: 'Link English' });
+        navigator.mediaSession.playbackState = 'playing';
+        const set = (a, f) => { try { navigator.mediaSession.setActionHandler(a, f); } catch (e) {} };
+        set('play', () => { if (!state.isLooping) toggleLoop(); });
+        set('pause', () => { if (state.isLooping) stopAudio(); });
+        set('stop', () => { if (state.isLooping) stopAudio(); });
+        set('nexttrack', () => loopSkip(1));
+        set('previoustrack', () => loopSkip(-1));
+    } catch (e) { console.warn('mediaSession', e); }
+}
+function updateMediaMeta(i, n) {
+    if (!('mediaSession' in navigator)) return;
+    try {
+        const d = state.data[state.currentIndex];
+        navigator.mediaSession.metadata = new MediaMetadata({ title: (d && d.commute_content.summary || 'Link English') + ' (' + (i + 1) + '/' + n + ')', artist: 'Commute loop', album: 'Link English' });
+    } catch (e) {}
+}
 
 // --- NAVIGATION & UTILS ---
-function setMode(m) { state.mode = m; stopAudio(); render(); }
-function openLesson(i) { state.currentIndex = i; state.mode = 'lesson'; state.lessonTab = 'commute'; state.showText = false; stopAudio(); render(); }
+function setMode(m) { dlAbort(); state.mode = m; stopAudio(); render(); }
+function openLesson(i) { dlAbort(); state.currentIndex = i; state.mode = 'lesson'; state.lessonTab = 'commute'; state.showText = false; stopAudio(); render(); }
 function setLessonTab(t) { state.lessonTab = t; stopAudio(); render(); }
 function toggleTheme() { state.theme = state.theme === 'light' ? 'dark' : 'light'; document.documentElement.setAttribute('data-theme', state.theme); localStorage.setItem('le_theme', state.theme); render(); }
 function saveData() { localStorage.setItem('le_data', JSON.stringify(state.data)); }
@@ -271,23 +326,44 @@ function stopAudio() {
     render(); 
 }
 
-function toggleLoop() { 
+let loopTok = 0;
+function loopItems() {
+    const d = state.data[state.currentIndex];
+    const items = [d.commute_content.english_text];
+    if (state.loopAll) ((d.home_content && d.home_content.drills) || []).forEach(x => { if (x.english) items.push(x.english); });
+    return items;
+}
+function setLoopAll(v) { state.loopAll = (v === 'all'); saveUiPrefs(); if (state.isLooping) { state.loopIdx = 0; loopTok++; window.speechSynthesis.cancel(); runRecursiveLoop(); } }
+function toggleLoop() {
     if (state.isLooping) {
         stopAudio();
-    } else { 
-        state.isLooping = true; 
+    } else {
+        state.isLooping = true; state.loopIdx = 0;
         enableBackgroundPlayback();
-        render(); 
+        render();
         runRecursiveLoop();
-    } 
+    }
 }
-
 function runRecursiveLoop() {
     if (!state.isLooping) return;
-    const text = state.data[state.currentIndex].commute_content.english_text;
-    speak(text, () => {
-        if (state.isLooping) setTimeout(runRecursiveLoop, 3000);
+    const items = loopItems();
+    const i = state.loopIdx % items.length;
+    const tok = ++loopTok;
+    state.loopCur = i;
+    updateMediaMeta(i, items.length);
+    const now = document.getElementById('loop-now'); if (now) now.innerText = (i + 1) + ' / ' + items.length;
+    speak(items[i], () => {
+        if (!state.isLooping || tok !== loopTok) return;
+        state.loopIdx = (i + 1) % items.length;
+        setTimeout(() => { if (state.isLooping && tok === loopTok) runRecursiveLoop(); }, 3000);
     });
+}
+function loopSkip(d) {
+    if (!state.isLooping) return;
+    const n = loopItems().length;
+    state.loopIdx = (((state.loopCur || 0) + d) % n + n) % n;
+    loopTok++; window.speechSynthesis.cancel();
+    runRecursiveLoop();
 }
 
 // --- SRS & SPEECH ANALYSIS ---
@@ -304,16 +380,86 @@ function updateSRS(statsObj, resultStr, score) {
     if (score !== undefined) statsObj.last_score = score;
 }
 
+// --- SPEECH MATCHING (v5.1): 語順を見る(LCS)。数字・ハイフン・&・短縮形を揃えてから比較する ---
+const NUM_ONES = ['zero','one','two','three','four','five','six','seven','eight','nine','ten','eleven','twelve','thirteen','fourteen','fifteen','sixteen','seventeen','eighteen','nineteen'];
+const NUM_TENS = { twenty: 20, thirty: 30, forty: 40, fifty: 50, sixty: 60, seventy: 70, eighty: 80, ninety: 90 };
+const ORD_WORDS = { first:1, second:2, third:3, fourth:4, fifth:5, sixth:6, seventh:7, eighth:8, ninth:9, tenth:10, eleventh:11, twelfth:12, thirteenth:13, fourteenth:14, fifteenth:15, sixteenth:16, seventeenth:17, eighteenth:18, nineteenth:19, twentieth:20, thirtieth:30 };
+function ordSuffix(n) { const r = n % 100; if (r >= 11 && r <= 13) return 'th'; return ({ 1: 'st', 2: 'nd', 3: 'rd' })[n % 10] || 'th'; }
+
+function normTokens(str) {
+    let s = String(str).toLowerCase().replace(/[’‘`]/g, "'");
+    s = s.replace(/&/g, ' and ').replace(/%/g, ' percent ');
+    s = s.replace(/\b([ap])\.\s?m\b\.?/g, '$1m');
+    s = s.replace(/(\d),(?=\d{3}\b)/g, '$1');
+    s = s.replace(/\bcannot\b/g, 'can not').replace(/\bcan't\b/g, 'can not').replace(/\bwon't\b/g, 'will not').replace(/\blet's\b/g, 'let us')
+         .replace(/\b(it|that|there|here|what|who|he|she|where|how)'s\b/g, '$1 is')
+         .replace(/n't\b/g, ' not').replace(/'m\b/g, ' am').replace(/'re\b/g, ' are')
+         .replace(/'ve\b/g, ' have').replace(/'ll\b/g, ' will').replace(/'d\b/g, ' would');
+    s = s.replace(/[^a-z0-9'\s]/g, ' ');
+    const raw = s.split(/\s+/).map(w => w.replace(/^'+|'+$/g, '')).filter(w => w.length > 0);
+    const out = [];
+    for (let i = 0; i < raw.length; i++) {
+        const w = raw[i], nx = raw[i + 1];
+        if (NUM_TENS[w] !== undefined) {
+            const idx = NUM_ONES.indexOf(nx);
+            if (nx !== undefined && idx >= 1 && idx <= 9) { out.push(String(NUM_TENS[w] + idx)); i++; continue; }
+            const oi = ORD_WORDS[nx];
+            if (nx !== undefined && oi >= 1 && oi <= 9) { const n = NUM_TENS[w] + oi; out.push(n + ordSuffix(n)); i++; continue; }
+            out.push(String(NUM_TENS[w])); continue;
+        }
+        const ni = NUM_ONES.indexOf(w);
+        if (ni !== -1) { out.push(String(ni)); continue; }
+        if (ORD_WORDS[w] !== undefined) { out.push(ORD_WORDS[w] + ordSuffix(ORD_WORDS[w])); continue; }
+        out.push(w);
+    }
+    return out;
+}
+
+function lcsMarks(t, h) {
+    const n = t.length, m = h.length;
+    const dp = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
+    for (let a = n - 1; a >= 0; a--) for (let b = m - 1; b >= 0; b--)
+        dp[a][b] = t[a] === h[b] ? dp[a + 1][b + 1] + 1 : Math.max(dp[a + 1][b], dp[a][b + 1]);
+    const marks = new Array(n).fill(false);
+    let a = 0, b = 0;
+    while (a < n && b < m) {
+        if (t[a] === h[b]) { marks[a] = true; a++; b++; }
+        else if (dp[a + 1][b] >= dp[a][b + 1]) a++;
+        else b++;
+    }
+    return marks;
+}
+
+function escHtml(str) { return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+// onclick="..." の中に文を埋め込むとき用(二重引用符・アポストロフィ・&を安全にする)
+function jsAttr(str) {
+    return String(str).replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\r?\n/g, ' ')
+        .replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
 function analyzeSpeech(target, input) {
-    const clean = (s) => s.toLowerCase().replace(/[.,?!]/g, "").split(/\s+/).filter(x => x.length > 0);
-    const tWords = clean(target), iWords = clean(input);
-    let html = "", matched = 0;
-    tWords.forEach(w => {
-        if (iWords.includes(w)) { html += `<span class="word-ok">${w}</span> `; matched++; iWords.splice(iWords.indexOf(w), 1); }
-        else html += `<span class="word-miss">${w}</span> `;
-    });
+    const tWords = normTokens(target), hWords = normTokens(input);
+    const marks = lcsMarks(tWords, hWords);
+    const matched = marks.filter(Boolean).length;
     const score = tWords.length === 0 ? 0 : Math.round((matched / tWords.length) * 100);
-    return { score, html: `<div style="font-weight:bold; color:${score===100?'var(--success)':'var(--danger)'}">Score: ${score}%</div>${html}` };
+    // 単語は全部あるが順番だけ違うケースを検出する
+    const pool = hWords.slice(); let bag = 0;
+    tWords.forEach(w => { const k = pool.indexOf(w); if (k !== -1) { bag++; pool.splice(k, 1); } });
+    const orderOnly = score < 100 && tWords.length > 0 && bag === tWords.length;
+    const words = tWords.map((w, i) => `<span class="${marks[i] ? 'word-ok' : 'word-miss'}">${escHtml(w)}</span>`).join(' ');
+    return {
+        score, matched, total: tWords.length, orderOnly,
+        html: `<div style="font-weight:bold; color:${score===100?'var(--success)':'var(--danger)'}">Score: ${score}%${orderOnly ? ' <span style="font-size:0.8rem;">(語順が違います)</span>' : ''}</div>${words}<div style="margin-top:6px; font-size:0.75rem; color:var(--subtext);">Heard: ${escHtml(input) || '(nothing)'}</div>`
+    };
+}
+
+// --- ACTIVITY LOG (v5.1) ---
+const LOG_MAX = 6000;
+function saveLog() { try { localStorage.setItem('le_log', JSON.stringify(state.log)); } catch (e) { console.warn('log save failed', e); } }
+function addLog(e) {
+    state.log.push(Object.assign({ t: Date.now() }, e));
+    if (state.log.length > LOG_MAX) state.log.splice(0, state.log.length - LOG_MAX);
+    saveLog();
 }
 
 // --- MODE 1: SELF EVAL (Level 1) ---
@@ -321,6 +467,7 @@ function saveSelfEval(type, index, resultStr) {
     const d = state.data[state.currentIndex];
     let targetStats = (type === 'commute') ? d.commute_content.stats : d.home_content.drills[index].stats;
     updateSRS(targetStats, resultStr);
+    addLog({ m: 'self', l: (d.commute_content.summary || '').slice(0, 60), p: type === 'commute' ? -1 : index, r: resultStr });
     saveData(); render();
 }
 
@@ -351,9 +498,10 @@ function startDictation(target, resId, btnId) {
 function initMode2() {
     if(!recognition) return alert("ブラウザが音声認識に未対応です");
     const d = state.data[state.currentIndex];
-    m2.queue = [{ type: 'commute', jp: d.commute_content.japanese_translation, en: d.commute_content.english_text, obj: d.commute_content }];
+    const sum = (d.commute_content.summary || '').slice(0, 60);
+    m2.queue = [{ type: 'commute', jp: d.commute_content.japanese_translation, en: d.commute_content.english_text, obj: d.commute_content, sum, ph: -1 }];
     if(d.home_content.drills) {
-        d.home_content.drills.forEach(drill => m2.queue.push({ type: 'drill', jp: drill.japanese, en: drill.english, obj: drill }));
+        d.home_content.drills.forEach((drill, i) => m2.queue.push({ type: 'drill', jp: drill.japanese, en: drill.english, obj: drill, sum, ph: i }));
     }
     m2.isTestMode = false;
     m2.currentIndex = 0;
@@ -381,15 +529,15 @@ function startTest() {
     const now = Date.now();
     
     state.data.forEach((d) => {
-        const check = (obj, jp, targetText) => {
+        const check = (obj, jp, targetText, ph) => {
             let st = obj.stats;
             if (st && st.tested_in_m2 && st.next_review <= now) {
-                dueItems.push({ obj: obj, jp: jp, en: targetText, priority: st.next_review || 0 });
+                dueItems.push({ obj: obj, jp: jp, en: targetText, priority: st.next_review || 0, sum: (d.commute_content.summary || '').slice(0, 60), ph });
             }
         };
-        check(d.commute_content, d.commute_content.japanese_translation, d.commute_content.english_text);
+        check(d.commute_content, d.commute_content.japanese_translation, d.commute_content.english_text, -1);
         if(d.home_content.drills) {
-            d.home_content.drills.forEach(drill => check(drill, drill.japanese, drill.english));
+            d.home_content.drills.forEach((drill, i) => check(drill, drill.japanese, drill.english, i));
         }
     });
     
@@ -426,12 +574,13 @@ function closeMode2() {
 
 // 💡 Hint機能（グローバル関数）
 window.showHint = function() {
+    m2.hintUsed = true;
     document.getElementById('m2-hint-box').classList.add('hidden');
     document.getElementById('m2-keywords').classList.remove('hidden');
 }
 
 function startMicAndTimer() {
-    try { recognition.start(); m2.isRecording = true; } catch(e){}
+    try { recognition.start(); m2.isRecording = true; m2.micStartAt = performance.now(); m2.speechAt = 0; } catch(e){}
     m2.timerId = setInterval(() => {
         m2.timeLeft -= 0.1;
         const bar = document.getElementById('m2-timer-bar');
@@ -453,6 +602,7 @@ function startMode2Item() {
     const item = m2.queue[m2.currentIndex];
     const obj = item.obj;
     m2.currentTarget = item.en; m2.currentStatsObj = obj; m2.timeLeft = 10;
+    m2.hintUsed = false; m2.resolved = false; m2.micStartAt = 0; m2.speechAt = 0;
     
     let stepTitle = m2.isTestMode ? `🎯 Smart Test (${m2.currentIndex + 1} / ${m2.queue.length})` : `⚡ Item ${m2.currentIndex + 1}/${m2.queue.length} - Step ${m2.currentStep}/3`;
     let contentHtml = "";
@@ -503,24 +653,54 @@ function startMode2Item() {
     }
 
     recognition.onresult = (e) => { clearInterval(m2.timerId); m2.isRecording = false; handleMode2Result(e.results[0][0].transcript); };
-    recognition.onerror = (e) => { if(e.error === 'no-speech') { clearInterval(m2.timerId); handleMode2Result(""); } };
+    recognition.onerror = (e) => {
+        if (e.error === 'no-speech') { clearInterval(m2.timerId); handleMode2Result(""); }
+        else if (e.error === 'aborted') return;
+        else m2Error(e.error);   // 通信・マイク等のエラーは記録せず、やり直しにする
+    };
+    recognition.onspeechstart = () => { if (!m2.speechAt) m2.speechAt = performance.now(); };
     recognition.onend = () => m2.isRecording = false;
+}
+
+function m2Error(err) {
+    if (m2.resolved) return;
+    m2.resolved = true;
+    clearInterval(m2.timerId);
+    try { recognition.abort(); } catch (e) {}
+    m2.isRecording = false;
+    const msg = (err === 'network') ? '通信を確認してください(音声認識はオンラインが必要です)。'
+        : (err === 'not-allowed' || err === 'service-not-allowed') ? 'マイクの許可を確認してください。'
+        : (err === 'audio-capture') ? 'マイクが使えません。' : '音声認識でエラーが発生しました。';
+    document.getElementById('mode2-content').innerHTML = `
+        <div style="color:var(--danger); font-weight:bold;">⚠ 音声認識エラー: ${escHtml(err)}</div>
+        <div style="font-size:0.85rem; color:var(--subtext); margin:10px 0 15px;">${msg}<br>この回は記録されません。</div>
+        <div style="display:flex; gap:10px;">
+            <button class="btn btn-outline" style="flex:1" onclick="closeMode2()">Stop</button>
+            <button class="btn btn-accent" style="flex:2; font-weight:bold;" onclick="startMode2Item()">Retry ↺</button>
+        </div>`;
 }
 
 function handleMode2Result(input) {
     clearInterval(m2.timerId);
+    if (m2.resolved) return; // タイムアウト直後に遅れて届いた認識結果を二重計上しない
+    m2.resolved = true;
     if(m2.isRecording) { recognition.stop(); m2.isRecording = false; }
 
+    input = input || "";
     const isTimeout = (input.trim() === "");
     let feedback = "", score = 0, resStr = 'nogood';
+    const rt = (!isTimeout && m2.speechAt && m2.micStartAt) ? Math.round(m2.speechAt - m2.micStartAt) : null;
 
     if (isTimeout) {
         feedback = `<div style="color:var(--danger); font-weight:bold; font-size:1.2rem; margin-bottom:10px;">⏱️ Time Out / Silence</div>`;
     } else {
         const analysis = analyzeSpeech(m2.currentTarget, input);
         score = analysis.score; feedback = analysis.html;
+        if (rt !== null) feedback += `<div style="margin-top:4px; font-size:0.8rem; color:var(--subtext);">⏱ Reaction: ${(rt / 1000).toFixed(1)}s</div>`;
         if(score === 100) resStr = 'good'; else if(score >= 80) resStr = 'retry';
     }
+    const curItem = m2.queue[m2.currentIndex] || {};
+    addLog({ m: m2.isTestMode ? 'test' : 's' + m2.currentStep, l: curItem.sum || '', p: curItem.ph === undefined ? -1 : curItem.ph, sc: score, r: resStr, to: isTimeout ? 1 : 0, rt, h: m2.hintUsed ? 1 : 0 });
     
     let buttonsHtml = "";
     
@@ -571,37 +751,575 @@ function render() {
     else if (state.mode === 'settings') { document.getElementById('nav-config').classList.add('active'); renderSettings(app); }
     else if (state.mode === 'lesson') { document.getElementById('nav-list').classList.add('active'); renderLesson(app); }
     else if (state.mode === 'stats') { document.getElementById('nav-stats').classList.add('active'); renderStats(app); }
+    else if (state.mode === 'talk') { document.getElementById('nav-talk').classList.add('active'); renderTalkList(app); }
+    else if (state.mode === 'dialog') { document.getElementById('nav-talk').classList.add('active'); renderDialog(app); }
     else if (state.mode === 'test') { document.getElementById('nav-test').classList.add('active'); }
 
     updateTestBadge();
 }
 
+// --- UI PREFS (v5.2) ---
+function saveUiPrefs() {
+    try {
+        localStorage.setItem('le_ui_prefs', JSON.stringify({
+            listFilter: state.listFilter, listSort: state.listSort, listQuery: state.listQuery,
+            loopAll: state.loopAll, talkSecs: state.talkSecs, talkShowText: state.talkShowText,
+            dlgScenario: state.dlgScenario, dlgLevel: state.dlgLevel, dlgTurns: state.dlgTurns, dlgQty: state.dlgQty
+        }));
+    } catch (e) {}
+}
+function escAttr(str) { return escHtml(str).replace(/"/g, '&quot;'); }
+
+// --- LIST (v5.2): 検索・フィルタ・並び替え・続きから ---
+function lessonPhrases(d) { return [d.commute_content, ...((d.home_content && d.home_content.drills) || [])]; }
+function lessonStatus(d) {
+    const ph = lessonPhrases(d), now = Date.now();
+    const results = ph.map(p => p.stats && p.stats.result);
+    const good = results.filter(r => r === 'good').length;
+    const weak = results.filter(r => r === 'retry' || r === 'nogood').length;
+    const tested = results.filter(Boolean).length;
+    const due = ph.filter(p => p.stats && p.stats.tested_in_m2 && p.stats.next_review <= now).length;
+    const listened = !!(d.progress && d.progress.listen);
+    let status = 'new';
+    if (good === ph.length && listened) status = 'done';
+    else if (tested > 0 || listened) status = 'doing';
+    return { status, good, weak, tested, due, total: ph.length };
+}
+const LIST_FILTERS = [['all', 'All'], ['todo', '未完了'], ['due', '要復習'], ['weak', '弱点'], ['done', '完了']];
+const LIST_SORTS = [['order', '登録順'], ['new', '新しい順'], ['todo', '進行中を先に'], ['due', '要復習を先に']];
+function visibleLessons() {
+    const q = (state.listQuery || '').trim().toLowerCase();
+    let rows = state.data.map((d, i) => ({ d, i, st: lessonStatus(d) }));
+    rows = rows.filter(r => {
+        const st = r.st, f = state.listFilter;
+        if (f === 'todo' && st.status === 'done') return false;
+        if (f === 'due' && st.due === 0) return false;
+        if (f === 'weak' && st.weak === 0) return false;
+        if (f === 'done' && st.status !== 'done') return false;
+        if (q) {
+            const c = r.d.commute_content || {};
+            const hay = ((c.summary || '') + ' ' + (r.d.category || '') + ' ' + (r.d.topic || '') + ' ' + (c.english_text || '')).toLowerCase();
+            if (!hay.includes(q)) return false;
+        }
+        return true;
+    });
+    const rank = { doing: 0, new: 1, done: 2 };
+    if (state.listSort === 'todo') rows.sort((a, b) => (rank[a.st.status] - rank[b.st.status]) || (a.i - b.i));
+    else if (state.listSort === 'due') rows.sort((a, b) => (b.st.due - a.st.due) || (b.st.weak - a.st.weak) || (a.i - b.i));
+    else if (state.listSort === 'new') rows.sort((a, b) => b.i - a.i);
+    return rows;
+}
+function setListFilter(k) { state.listFilter = k; saveUiPrefs(); render(); }
+function setListSort(v) { state.listSort = v; saveUiPrefs(); render(); }
+function setListQuery(v) { state.listQuery = v; saveUiPrefs(); renderListBody(); }
+function openNextLesson() {
+    const rows = visibleLessons();
+    const pick = rows.find(r => r.st.status === 'doing') || rows.find(r => r.st.status === 'new') || rows[0];
+    if (!pick) return;
+    state.visible = rows.map(r => r.i);
+    openLesson(pick.i);
+}
+function lessonNav() {
+    const vis = (state.visible && state.visible.includes(state.currentIndex)) ? state.visible : state.data.map((_, i) => i);
+    const pos = vis.indexOf(state.currentIndex);
+    return { prev: pos > 0 ? vis[pos - 1] : null, next: (pos !== -1 && pos < vis.length - 1) ? vis[pos + 1] : null };
+}
+function goLesson(dir) { const n = lessonNav(); const t = dir < 0 ? n.prev : n.next; if (t !== null) openLesson(t); }
+
 function renderList(c) {
-    if (state.data.length === 0) { c.innerHTML = '<div style="text-align:center;padding:40px;color:var(--subtext)">No lessons.<br>Add some in Config!</div>'; return; }
-    c.innerHTML = state.data.map((d, i) => {
-        let dots = [d.commute_content, ...(d.home_content.drills || [])].map(item => {
+    if (state.data.length === 0) { state.visible = []; c.innerHTML = '<div style="text-align:center;padding:40px;color:var(--subtext)">No lessons.<br>Add some in Config!</div>'; return; }
+    const sts = state.data.map(lessonStatus);
+    const cnt = {
+        all: sts.length, todo: sts.filter(s => s.status !== 'done').length, due: sts.filter(s => s.due > 0).length,
+        weak: sts.filter(s => s.weak > 0).length, done: sts.filter(s => s.status === 'done').length
+    };
+    const doing = sts.filter(s => s.status === 'doing').length, fresh = sts.filter(s => s.status === 'new').length;
+    const dueTotal = sts.reduce((a, s) => a + s.due, 0);
+    const chip = ([k, label]) => `<button class="chip ${state.listFilter === k ? 'chip-on' : ''}" onclick="setListFilter('${k}')">${label} ${cnt[k]}</button>`;
+    c.innerHTML = `
+    <div style="font-size:0.8rem; color:var(--subtext); margin-bottom:8px;">全${cnt.all} ・ 完了 ${cnt.done} ・ 進行中 ${doing} ・ 未着手 ${fresh} ・ 復習期限 <b style="color:${dueTotal ? 'var(--danger)' : 'inherit'}">${dueTotal}</b></div>
+    <div style="display:flex; gap:8px; margin-bottom:8px;">
+        <button class="btn" style="flex:1; padding:10px;" onclick="openNextLesson()">▶ 続きから</button>
+        <select style="flex:1;" onchange="setListSort(this.value)">${LIST_SORTS.map(([k, l]) => `<option value="${k}" ${state.listSort === k ? 'selected' : ''}>${l}</option>`).join('')}</select>
+    </div>
+    <input type="text" id="list-q" placeholder="🔍 検索 (タイトル・英文)" value="${escAttr(state.listQuery)}" oninput="setListQuery(this.value)" style="margin-bottom:8px;">
+    <div class="chip-row">${LIST_FILTERS.map(chip).join('')}</div>
+    <div id="list-body"></div>`;
+    renderListBody();
+}
+
+function renderListBody() {
+    const body = document.getElementById('list-body');
+    if (!body) return;
+    const rows = visibleLessons();
+    state.visible = rows.map(r => r.i);
+    if (rows.length === 0) { body.innerHTML = '<div style="text-align:center;padding:30px;color:var(--subtext)">該当するレッスンがありません。</div>'; return; }
+    body.innerHTML = rows.map(({ d, i, st }) => {
+        const dots = lessonPhrases(d).map(item => {
             let color = '#e2e8f0';
             if (item.stats && item.stats.result === 'good') color = 'var(--success)';
             else if (item.stats && item.stats.result === 'retry') color = 'var(--accent)';
             else if (item.stats && item.stats.result === 'nogood') color = 'var(--danger)';
             return `<div style="width:10px; height:10px; border-radius:50%; background-color:${color};"></div>`;
         }).join('');
+        const known = ['Business', 'Daily', 'Travel', 'TOEIC'].includes(d.category);
+        const tags = (st.status === 'done' ? '<span class="status-tag st-done">✅ 完了</span>' : st.status === 'doing' ? '<span class="status-tag st-doing">進行中</span>' : '')
+            + (st.due > 0 ? `<span class="status-tag st-due">復習 ${st.due}</span>` : '');
         return `
         <div class="list-item" onclick="openLesson(${i})">
             <div class="list-content">
                 <div class="list-summary">${d.commute_content.summary}</div>
                 <div class="list-meta" style="margin-bottom:8px;">
-                    <span class="cat-tag cat-${d.category}">${d.category}</span>
-                    <span class="level-tag">${d.level}</span>
+                    <span class="cat-tag ${known ? 'cat-' + d.category : 'cat-Other'}" title="${escAttr(d.category)}">${escHtml(d.category)}</span>
+                    <span class="level-tag">${d.level}</span>${d.topic && d.topic !== d.category ? `<span class="level-tag">${escHtml(d.topic)}</span>` : ''}${tags}
                 </div>
                 <div style="display:flex; gap:15px; font-size:0.8rem;">
-                    <div style="color:${d.progress.listen?'var(--success)':'var(--subtext)'}; font-weight:bold;">${d.progress.listen?'🎧 ✅':'🎧 ⬜'}</div>
+                    <div style="color:${d.progress.listen ? 'var(--success)' : 'var(--subtext)'}; font-weight:bold;">${d.progress.listen ? '🎧 ✅' : '🎧 ⬜'}</div>
                     <div style="display:flex; gap:4px; align-items:center;">🗣️ ${dots}</div>
                 </div>
             </div>
             <span>›</span>
         </div>`;
     }).join('');
+}
+
+// --- TALK / DIALOGUE MODE (v5.2) ---
+let dl = null; // 実行中の対話
+function saveDialogs() { try { localStorage.setItem('le_dialogs', JSON.stringify(state.dialogs)); } catch (e) { console.warn('dialogs save failed', e); } }
+
+function validateDialog(d) {
+    const errs = [];
+    if (!d || typeof d !== 'object') return ['not an object'];
+    if (typeof d.title !== 'string' || !d.title.trim()) errs.push('title missing');
+    if (!Array.isArray(d.turns) || d.turns.length < 4) { errs.push('turns must have 4+ items'); return errs; }
+    let me = 0;
+    d.turns.forEach((t, i) => {
+        const n = i + 1;
+        if (!t || (t.speaker !== 'partner' && t.speaker !== 'me')) { errs.push(`turn ${n}: speaker must be partner or me`); return; }
+        if (typeof t.en !== 'string' || !t.en.trim()) { errs.push(`turn ${n}: en missing`); return; }
+        if (t.speaker === 'me') {
+            me++;
+            if (typeof t.intent_en !== 'string' || !t.intent_en.trim()) errs.push(`turn ${n}: intent_en missing`);
+            if (t.keywords !== undefined && !Array.isArray(t.keywords)) errs.push(`turn ${n}: keywords must be an array`);
+            if (t.alt !== undefined && !(Array.isArray(t.alt) && t.alt.every(x => typeof x === 'string'))) errs.push(`turn ${n}: alt must be an array of strings`);
+        }
+    });
+    if (me < 2) errs.push('need 2+ me turns');
+    return errs;
+}
+function normalizeDialog(d) {
+    d.id = d.id || ('dlg_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6));
+    d.category = d.category || 'Business';
+    d.level = d.level || 'Intermediate';
+    d.turns.forEach(t => {
+        if (t.speaker === 'me') {
+            t.keywords = t.keywords || []; t.alt = t.alt || [];
+            if (!t.stats) t.stats = { last_score: null, result: null };
+        }
+    });
+    return d;
+}
+function dialogMeTurns(d) { return d.turns.map((t, i) => ({ t, i })).filter(x => x.t.speaker === 'me'); }
+
+function renderTalkList(c) {
+    if (state.dialogs.length === 0) {
+        c.innerHTML = '<div style="text-align:center;padding:40px;color:var(--subtext)">対話データがありません。<br>Config の Dialogue Builder でJSONを読み込んでください。</div>';
+        return;
+    }
+    c.innerHTML = `<div style="font-size:0.8rem; color:var(--subtext); margin-bottom:8px;">💬 Talk: 相手の英語を聞いて、その場で答える練習 (${state.dialogs.length}件)</div>`
+        + state.dialogs.map((d, i) => {
+            const mine = dialogMeTurns(d);
+            const dots = mine.map(({ t }) => {
+                let color = '#e2e8f0';
+                if (t.stats && t.stats.result === 'good') color = 'var(--success)';
+                else if (t.stats && t.stats.result === 'retry') color = 'var(--accent)';
+                else if (t.stats && t.stats.result === 'nogood') color = 'var(--danger)';
+                return `<div style="width:10px; height:10px; border-radius:50%; background-color:${color};"></div>`;
+            }).join('');
+            return `
+            <div class="list-item" onclick="openDialog(${i})">
+                <div class="list-content">
+                    <div class="list-summary">${escHtml(d.title)}</div>
+                    <div class="list-meta" style="margin-bottom:8px;">
+                        <span class="cat-tag cat-Other">${escHtml(d.category)}</span>
+                        <span class="level-tag">${escHtml(d.level)}</span>
+                        <span class="level-tag">${mine.length}問</span>
+                    </div>
+                    <div style="display:flex; gap:4px; align-items:center; font-size:0.8rem;">🗣️ ${dots}</div>
+                </div>
+                <span>›</span>
+            </div>`;
+        }).join('');
+}
+
+function openDialog(i) {
+    dlAbort();
+    state.dlgIndex = i; state.mode = 'dialog';
+    dl = { d: state.dialogs[i], i: 0, token: 0, running: false, phase: 'intro', attempts: {}, results: [], html: '' };
+    stopAudio();
+    dlIntro();
+}
+function renderDialog(c) { if (dl && dl.html) c.innerHTML = dl.html; else if (dl) dlIntro(); }
+function dlShow(html) {
+    if (!dl) return;
+    dl.html = html;
+    if (state.mode === 'dialog') { const app = document.getElementById('app-content'); if (app) app.innerHTML = html; }
+}
+function dlHeader() {
+    return `<div class="lesson-header"><button class="btn-outline" onclick="dlQuit()" style="width:auto;padding:5px 10px;">← Quit</button><div style="font-weight:bold; font-size:0.9rem;">${escHtml(dl.d.title)} (${Math.min(dl.i + 1, dl.d.turns.length)}/${dl.d.turns.length})</div><div style="width:50px"></div></div>`;
+}
+function dlIntro() {
+    const d = dl.d;
+    dl.phase = 'intro'; dl.running = false;
+    dlShow(`
+    <div class="lesson-header"><button class="btn-outline" onclick="setMode('talk')" style="width:auto;padding:5px 10px;">← Back</button><div style="font-weight:bold">${escHtml(d.title)}</div><div style="width:50px"></div></div>
+    <div class="card">
+        <div style="font-size:0.8rem; color:var(--primary); font-weight:bold;">[Situation]</div>
+        <div style="font-size:1.05rem; line-height:1.5; margin:6px 0 10px;">${escHtml(d.situation_en || '')}</div>
+        ${d.situation_ja ? `<div class="text-jp">${escHtml(d.situation_ja)}</div>` : ''}
+        <div style="font-size:0.85rem; color:var(--subtext); margin-top:10px;">相手: ${escHtml(d.partner_role || 'Partner')} ／ あなた: ${escHtml(d.my_role || 'You')}</div>
+    </div>
+    <div class="card">
+        <label>Answer time (sec)</label>
+        <select id="dl-secs" onchange="state.talkSecs=parseInt(this.value); saveUiPrefs()">${[10, 8, 6, 5].map(s => `<option ${state.talkSecs === s ? 'selected' : ''}>${s}</option>`).join('')}</select>
+        <label style="margin-top:10px;">Partner text</label>
+        <select id="dl-showtext" onchange="state.talkShowText=(this.value==='show'); saveUiPrefs()">
+            <option value="hide" ${state.talkShowText ? '' : 'selected'}>Hidden (listen only)</option>
+            <option value="show" ${state.talkShowText ? 'selected' : ''}>Shown</option>
+        </select>
+        <button class="btn btn-danger-outline" style="margin-top:15px; font-size:1.1rem; border-width:2px; font-weight:bold;" onclick="dlRunStart()">▶ Start</button>
+    </div>`);
+}
+function dlRunStart() {
+    if (!recognition) return alert('ブラウザが音声認識に未対応です');
+    dl.i = 0; dl.results = []; dl.attempts = {}; dl.running = true; dl.token++;
+    dlNext();
+}
+function dlNext() {
+    if (!dl) return;
+    if (dl.i >= dl.d.turns.length) return dlFinish();
+    const t = dl.d.turns[dl.i];
+    if (t.speaker === 'partner') dlPartner(t); else dlMe(t);
+}
+function dlPartner(t) {
+    const tok = ++dl.token;
+    dl.phase = 'partner';
+    const showing = state.talkShowText;
+    dlShow(`${dlHeader()}
+    <div class="card" style="text-align:center;">
+        <div style="font-size:0.8rem; color:var(--subtext);">${escHtml(dl.d.partner_role || 'Partner')}</div>
+        <div style="font-size:1.2rem; line-height:1.5; margin:14px 0; ${showing ? '' : 'color:var(--subtext);'}">${showing ? escHtml(t.en) : '🔊 (Listening...)'}</div>
+        ${showing && t.ja ? `<div class="text-jp">${escHtml(t.ja)}</div>` : ''}
+    </div>`);
+    speak(t.en, () => {
+        if (tok !== dl.token) return;
+        dl.i++;
+        setTimeout(() => { if (tok === dl.token) dlNext(); }, 300);
+    });
+}
+function dlPartnerBlock() {
+    const out = [];
+    for (let k = dl.i - 1; k >= 0 && dl.d.turns[k].speaker === 'partner'; k--) out.unshift(dl.d.turns[k].en);
+    return out.join(' ');
+}
+function dlMe(t) {
+    const tok = ++dl.token;
+    dl.phase = 'listen';
+    dl.attempts[dl.i] = (dl.attempts[dl.i] || 0) + 1;
+    dl.hintUsed = 0; dl.resolved = false; dl.micStartAt = 0; dl.speechAt = 0; dl.replaysTurn = 0;
+    const canReplay = dlPartnerBlock() !== '';
+    dlShow(`${dlHeader()}
+    <div class="card" style="text-align:center;">
+        <div style="font-size:0.8rem; color:var(--primary); font-weight:bold;">[Your turn]</div>
+        <div style="font-size:1.2rem; font-weight:bold; line-height:1.4; margin:10px 0;">${escHtml(t.intent_en)}</div>
+        <div id="dl-hint-box"><button class="btn btn-outline" style="padding:6px 12px; font-size:0.8rem;" onclick="dlHint()">🔍 Keyword Hint</button></div>
+        <div id="dl-keywords" class="hidden" style="font-size:1rem; color:var(--accent); font-weight:bold; margin-top:10px;">[ ${escHtml((t.keywords || []).join(' / '))} ]</div>
+        <div class="timer-bar-container"><div class="timer-bar" id="dl-timer-bar"></div></div>
+        <div id="dl-status" style="font-size:0.8rem; color:var(--danger); font-weight:bold;">Listening...</div>
+        ${canReplay ? '<button class="btn btn-outline" style="margin-top:12px; padding:8px;" onclick="dlReplay()">🔁 Replay partner</button>' : ''}
+    </div>`);
+    playBeep();
+    setTimeout(() => { if (tok === dl.token) dlListen(t, tok); }, 300);
+}
+function dlHint() {
+    dl.hintUsed = Math.max(dl.hintUsed || 0, 1);
+    const hb = document.getElementById('dl-hint-box'), kw = document.getElementById('dl-keywords');
+    if (hb) hb.classList.add('hidden');
+    if (kw) kw.classList.remove('hidden');
+}
+function dlStartRec(tok, tries) {
+    if (tok !== dl.token) return;
+    try { recognition.start(); dl.micStartAt = performance.now(); dl.speechAt = 0; }
+    catch (err) { if ((tries || 0) < 4) setTimeout(() => dlStartRec(tok, (tries || 0) + 1), 250); }
+}
+function dlListen(t, tok) {
+    dl.endAt = performance.now() + state.talkSecs * 1000;
+    recognition.onresult = (e) => { if (tok !== dl.token) return; dlResult(t, e.results[0][0].transcript); };
+    recognition.onerror = (e) => {
+        if (tok !== dl.token) return;
+        if (e.error === 'no-speech') dlResult(t, '');
+        else if (e.error === 'aborted') return;
+        else dlError(t, e.error);
+    };
+    recognition.onspeechstart = () => { if (tok === dl.token && !dl.speechAt) dl.speechAt = performance.now(); };
+    recognition.onend = () => {};
+    dlStartRec(tok, 0);
+    clearInterval(dl.timerId);
+    dl.timerId = setInterval(() => {
+        if (tok !== dl.token) { clearInterval(dl.timerId); return; }
+        const left = Math.max(0, dl.endAt - performance.now());
+        const bar = document.getElementById('dl-timer-bar');
+        if (bar) bar.style.width = (left / (state.talkSecs * 1000) * 100) + '%';
+        if (left <= 0) { try { recognition.stop(); } catch (e2) {} dlResult(t, ''); }
+    }, 100);
+}
+function dlReplay() {
+    const text = dlPartnerBlock();
+    if (!text || dl.phase !== 'listen') return;
+    const t = dl.d.turns[dl.i];
+    const tok = ++dl.token;
+    clearInterval(dl.timerId);
+    try { recognition.abort(); } catch (e) {}
+    dl.replaysTurn = (dl.replaysTurn || 0) + 1;
+    dl.resolved = false;
+    const st = document.getElementById('dl-status'); if (st) st.innerText = 'Playing...';
+    const bar = document.getElementById('dl-timer-bar'); if (bar) bar.style.width = '100%';
+    speak(text, () => {
+        if (tok !== dl.token) return;
+        playBeep();
+        if (st) st.innerText = 'Listening...';
+        setTimeout(() => { if (tok === dl.token) dlListen(t, tok); }, 300);
+    });
+}
+function dlResult(t, input) {
+    if (!dl || dl.resolved) return;
+    dl.resolved = true; dl.phase = 'result';
+    clearInterval(dl.timerId);
+    try { recognition.stop(); } catch (e) {}
+    input = input || '';
+    const isTimeout = input.trim() === '';
+    let best = null;
+    if (!isTimeout) [t.en].concat(t.alt || []).forEach(tg => { const a = analyzeSpeech(tg, input); if (!best || a.score > best.score) best = Object.assign({ target: tg }, a); });
+    const score = best ? best.score : 0;
+    const res = isTimeout ? 'nogood' : (score === 100 ? 'good' : (score >= 80 ? 'retry' : 'nogood'));
+    const rt = (!isTimeout && dl.speechAt && dl.micStartAt) ? Math.round(dl.speechAt - dl.micStartAt) : null;
+    t.stats = { last_score: score, result: res };
+    saveDialogs();
+    addLog({ m: 'dlg', l: (dl.d.title || '').slice(0, 60), p: dl.i, sc: score, r: res, to: isTimeout ? 1 : 0, rt, h: dl.hintUsed || 0, rp: dl.replaysTurn || 0, a: dl.attempts[dl.i] });
+    dl.results[dl.i] = { res, score, rt, attempts: dl.attempts[dl.i] };
+    const alts = (t.alt || []);
+    dlShow(`${dlHeader()}
+    <div class="card">
+        <div style="font-weight:bold; color:var(--subtext); margin-bottom:5px;">Result</div>
+        ${isTimeout ? '<div style="color:var(--danger); font-weight:bold; font-size:1.2rem; margin-bottom:10px;">⏱️ Time Out / Silence</div>' : best.html}
+        ${rt !== null ? `<div style="margin-top:4px; font-size:0.8rem; color:var(--subtext);">⏱ Reaction: ${(rt / 1000).toFixed(1)}s${dl.replaysTurn ? ' ・ Replay ×' + dl.replaysTurn : ''}</div>` : ''}
+        <div style="margin-top:15px; padding:10px; background:var(--bg); border-radius:8px; border:1px solid var(--border);">
+            <div style="font-size:0.8rem; color:var(--subtext);">Model answer:</div>
+            <div style="font-weight:bold; color:var(--primary); font-size:1.1rem;">${escHtml(t.en)}</div>
+            ${alts.length ? `<div style="font-size:0.85rem; color:var(--subtext); margin-top:6px;">Also OK: ${alts.map(escHtml).join(' ／ ')}</div>` : ''}
+            ${t.ja ? `<div class="text-jp">${escHtml(t.ja)}</div>` : ''}
+            <button class="btn btn-accent" style="margin-top:10px; padding:6px;" onclick="dlSpeakModel()">🔊 Listen</button>
+        </div>
+        <div style="display:flex; gap:10px; margin-top:15px;">
+            <button class="btn btn-outline" style="flex:1" onclick="dlRetry()">Retry ↺</button>
+            <button class="btn btn-danger-outline" style="flex:2; font-weight:bold;" onclick="dlAdvance()">Next ➔</button>
+        </div>
+    </div>`);
+}
+function dlError(t, err) {
+    if (!dl || dl.resolved) return;
+    dl.resolved = true; dl.phase = 'error';
+    clearInterval(dl.timerId);
+    try { recognition.abort(); } catch (e) {}
+    if (dl.attempts[dl.i]) dl.attempts[dl.i]--;   // 認識エラーは試行に数えない
+    const msg = (err === 'network') ? '通信を確認してください(音声認識はオンラインが必要です)。'
+        : (err === 'not-allowed' || err === 'service-not-allowed') ? 'マイクの許可を確認してください。'
+        : (err === 'audio-capture') ? 'マイクが使えません。' : '音声認識でエラーが発生しました。';
+    dlShow(`${dlHeader()}
+    <div class="card" style="text-align:center;">
+        <div style="color:var(--danger); font-weight:bold;">⚠ 音声認識エラー: ${escHtml(err)}</div>
+        <div style="font-size:0.85rem; color:var(--subtext); margin:10px 0 15px;">${msg}<br>この回は記録されません。</div>
+        <button class="btn" onclick="dlRetry()">Retry ↺</button>
+    </div>`);
+}
+function dlSpeakModel() { speak(dl.d.turns[dl.i].en); }
+function dlRetry() { dlMe(dl.d.turns[dl.i]); }
+function dlAdvance() { dl.i++; dlNext(); }
+function dlFinish() {
+    dl.phase = 'done'; dl.running = false; dl.token++;
+    const mine = dialogMeTurns(dl.d);
+    const rs = mine.map(({ i }) => dl.results[i]).filter(Boolean);
+    const good = rs.filter(r => r.res === 'good').length;
+    const first = rs.filter(r => r.attempts === 1 && r.res === 'good').length;
+    const rts = rs.map(r => r.rt).filter(x => typeof x === 'number');
+    const avg = rts.length ? (rts.reduce((a, b) => a + b, 0) / rts.length / 1000).toFixed(1) + 's' : '–';
+    const rows = mine.map(({ t, i }) => {
+        const r = dl.results[i];
+        const icon = !r ? '・' : (r.res === 'good' ? '✅' : (r.res === 'retry' ? '🔄' : '❌'));
+        return `<div style="padding:8px 0; border-top:1px solid var(--border); font-size:0.9rem;"><div>${icon} ${escHtml(t.intent_en)}</div><div style="color:var(--primary); font-weight:bold;">${escHtml(t.en)}</div></div>`;
+    }).join('');
+    dlShow(`
+    <div class="lesson-header"><button class="btn-outline" onclick="setMode('talk')" style="width:auto;padding:5px 10px;">← Back</button><div style="font-weight:bold">${escHtml(dl.d.title)}</div><div style="width:50px"></div></div>
+    <div class="card" style="text-align:center;">
+        <h2 style="margin-top:0;">🎉 Complete!</h2>
+        <div style="font-size:1.1rem;">Good ${good} / ${mine.length} ・ 1回目で成功 ${first} ・ 平均反応 ${avg}</div>
+    </div>
+    <div class="card">${rows}</div>
+    <button class="btn btn-danger-outline" style="font-weight:bold;" onclick="dlRunStart()">Again ↺</button>`);
+}
+function dlAbort() {
+    if (!dl) return;
+    dl.token++; clearInterval(dl.timerId);
+    try { if (recognition) recognition.abort(); } catch (e) {}
+    try { window.speechSynthesis.cancel(); } catch (e) {}
+    dl.running = false;
+}
+function dlQuit() { dlAbort(); setMode('talk'); }
+function dlPause() {
+    if (!dl || !dl.running || (dl.phase !== 'partner' && dl.phase !== 'listen')) return;
+    if (dl.phase === 'listen' && !dl.resolved && dl.attempts[dl.i]) dl.attempts[dl.i]--;
+    dl.token++; clearInterval(dl.timerId);
+    try { recognition.abort(); } catch (e) {}
+    try { window.speechSynthesis.cancel(); } catch (e) {}
+    dl.phase = 'paused';
+    dlShow(`${dlHeader()}
+    <div class="card" style="text-align:center;">
+        <div style="font-weight:bold;">⏸ Paused</div>
+        <div style="font-size:0.85rem; color:var(--subtext); margin:10px 0 15px;">画面が切り替わったため中断しました。この回は記録されません。</div>
+        <button class="btn" onclick="dlResume()">▶ Resume</button>
+    </div>`);
+}
+function dlResume() {
+    if (!dl) return;
+    // 自分の番で中断した場合は、直前の相手の発話から聞き直す
+    const t = dl.d.turns[dl.i];
+    if (t && t.speaker === 'me') {
+        let k = dl.i; while (k > 0 && dl.d.turns[k - 1].speaker === 'partner') k--;
+        dl.i = k;
+    }
+    dl.token++;
+    dlNext();
+}
+document.addEventListener('visibilitychange', () => { if (document.hidden) dlPause(); });
+
+
+// --- DIALOGUE BUILDER (v5.2) ---
+function dialogConfigCard() {
+    const loaded = state.dialogs.length
+        ? state.dialogs.map((d, i) => `<div style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding:6px 0; border-top:1px solid var(--border); font-size:0.85rem;"><span>${escHtml(d.title)} <span style="color:var(--subtext)">(${dialogMeTurns(d).length}問)</span></span><button class="btn-outline" style="width:auto; padding:3px 10px; border-color:var(--danger); color:var(--danger);" onclick="deleteDialog(${i})">削除</button></div>`).join('')
+        : '<div style="font-size:0.85rem; color:var(--subtext);">まだありません。</div>';
+    return `
+    <div class="card">
+        <h2>💬 Dialogue Builder (Talk)</h2>
+        <label>Scenario</label>
+        <input type="text" id="dp-scenario" value="${escAttr(state.dlgScenario)}" placeholder="例: Explaining a delay to a vendor" oninput="updateDialogPrompt()">
+        <div class="form-row" style="margin-top:10px;">
+            <div class="form-col">
+                <label>Level</label>
+                <select id="dp-level" onchange="updateDialogPrompt()">
+                    ${['Intermediate', 'Advanced', 'Beginner'].map(l => `<option ${state.dlgLevel === l ? 'selected' : ''}>${l}</option>`).join('')}
+                </select>
+            </div>
+            <div class="form-col" style="flex:0 0 70px;">
+                <label>Turns</label>
+                <input type="number" id="dp-turns" value="${state.dlgTurns}" min="4" max="20" oninput="updateDialogPrompt()">
+            </div>
+            <div class="form-col" style="flex:0 0 70px;">
+                <label>Qty</label>
+                <input type="number" id="dp-qty" value="${state.dlgQty}" min="1" max="10" oninput="updateDialogPrompt()">
+            </div>
+        </div>
+        <textarea id="dp-area" style="font-size:0.6rem; height:120px; margin-top:15px;" readonly></textarea>
+        <button class="btn btn-outline" onclick="copyDialogPrompt()">📋 Copy Dialogue Prompt</button>
+        <textarea id="dp-input" placeholder="Paste dialogue JSON here..." style="margin-top:15px;"></textarea>
+        <button class="btn" onclick="loadDialogJson()" style="margin-top:10px;">Load Dialogues</button>
+        <div style="margin-top:15px;"><label>Loaded dialogues (${state.dialogs.length})</label>${loaded}</div>
+    </div>`;
+}
+
+function updateDialogPrompt() {
+    const sc = document.getElementById('dp-scenario');
+    if (!sc) return;
+    state.dlgScenario = sc.value;
+    state.dlgLevel = document.getElementById('dp-level').value;
+    state.dlgTurns = Math.max(4, Math.min(20, parseInt(document.getElementById('dp-turns').value) || 8));
+    state.dlgQty = Math.max(1, Math.min(10, parseInt(document.getElementById('dp-qty').value) || 2));
+    saveUiPrefs();
+    const scenario = state.dlgScenario || 'Business';
+    const p = `あなたは英会話教材作成のプロです。ビジネス英会話の「対話練習」データを作成してください。
+## 生成モード
+シナリオ: ${scenario}
+レベル: ${state.dlgLevel}
+作成数: ${state.dlgQty}対話（1対話につき約${state.dlgTurns}ターン）
+相手(partner)の発話を聞いて、自分(me)がその場で英語で答える練習です。
+
+## 【絶対遵守ルール】
+1. 出力は以下のJSON配列のみ。解説・前置き・マークダウン以外のテキストは含めない。
+2. turns は partner から始め、partner と me を交互にする(partnerが続けて話してもよい)。me のターンは3つ以上。
+3. すべて話し言葉の長さにする。partner は1〜2文。me は12語以内で、短縮形(I'm, we'll, can't)を使う。
+4. me の各ターンは次を必ず含める:
+   - "intent_en": 言うべき内容を「英語で」説明(例: Apologize and give a new date.)。答えの英文そのものは書かない。
+   - "en": 模範解答
+   - "alt": 別の言い方で正解になる英文を1〜3個(配列)
+   - "keywords": ヒント用の英単語を2〜3個(配列)
+5. 英文の中にダブルクォーテーション、& 、スラッシュ記号は使わない。数字は英単語で書いてもアラビア数字でもよい。
+6. 毎回同じ書き出し(Sure, / Well, など)を連発しない。実際の仕事で使う自然な表現にする。
+7. "ja" は日本語訳。
+
+\`\`\`json
+[
+  {
+    "id": "dlg_001",
+    "type": "dialogue",
+    "category": "Business",
+    "level": "${state.dlgLevel}",
+    "title": "...",
+    "situation_en": "You are ...",
+    "situation_ja": "...",
+    "partner_role": "Vendor sales manager",
+    "my_role": "Project manager",
+    "turns": [
+      {"speaker": "partner", "en": "...", "ja": "..."},
+      {"speaker": "me", "intent_en": "Apologize and explain the delay.", "en": "...", "ja": "...", "alt": ["..."], "keywords": ["...", "..."]},
+      {"speaker": "partner", "en": "...", "ja": "..."},
+      {"speaker": "me", "intent_en": "...", "en": "...", "ja": "...", "alt": ["..."], "keywords": ["...", "..."]}
+    ]
+  }
+]
+\`\`\``;
+    const area = document.getElementById('dp-area');
+    if (area) area.value = p;
+}
+
+function copyDialogPrompt() {
+    updateDialogPrompt();
+    navigator.clipboard.writeText(document.getElementById('dp-area').value).then(() => alert('Copied!')).catch(() => alert('Copy failed'));
+}
+
+function loadDialogJson() {
+    let raw = (document.getElementById('dp-input').value || '').trim();
+    const s = raw.indexOf('['), e = raw.lastIndexOf(']');
+    if (s !== -1 && e !== -1) raw = raw.substring(s, e + 1);
+    let arr;
+    try { arr = JSON.parse(raw); } catch (err) { alert('Invalid JSON: データ形式が正しくありません。\n余計なテキストが含まれていないか確認してください。'); return; }
+    if (!Array.isArray(arr)) return alert('データが配列形式ではありません。');
+    const ok = [], bad = [];
+    let dup = 0;
+    arr.forEach((d, i) => {
+        const errs = validateDialog(d);
+        if (errs.length) { bad.push(`#${i + 1} ${(d && d.title) || ''}: ${errs[0]}`); return; }
+        if (state.dialogs.some(x => x.title === d.title) || ok.some(x => x.title === d.title)) { dup++; return; }
+        ok.push(normalizeDialog(d));
+    });
+    if (ok.length) { state.dialogs = state.dialogs.concat(ok); saveDialogs(); document.getElementById('dp-input').value = ''; }
+    alert(`追加 ${ok.length} 件 ／ 重複スキップ ${dup} 件 ／ 不正 ${bad.length} 件` + (bad.length ? '\n' + bad.slice(0, 5).join('\n') : ''));
+    if (ok.length) setMode('talk'); else render();
+}
+
+function deleteDialog(i) {
+    const d = state.dialogs[i];
+    if (!d || !confirm('「' + d.title + '」を削除しますか？')) return;
+    state.dialogs.splice(i, 1); saveDialogs(); render();
 }
 
 function renderLesson(c) {
@@ -614,16 +1332,23 @@ function renderLesson(c) {
         ${isListen ? renderListenContent(d) : renderSpeakContent(d)}
     </div>
     <div style="display:flex;justify-content:space-between;margin-top:20px">
-        <button class="btn-outline" style="width:45%" onclick="if(state.currentIndex>0) openLesson(state.currentIndex-1)" ${state.currentIndex===0?'disabled':''}>← Prev</button>
-        <button class="btn-outline" style="width:45%" onclick="if(state.currentIndex<state.data.length-1) openLesson(state.currentIndex+1)" ${state.currentIndex===state.data.length-1?'disabled':''}>Next →</button>
+        <button class="btn-outline" style="width:45%" onclick="goLesson(-1)" ${lessonNav().prev===null?'disabled':''}>← Prev</button>
+        <button class="btn-outline" style="width:45%" onclick="goLesson(1)" ${lessonNav().next===null?'disabled':''}>Next →</button>
     </div>`;
 }
 
 function renderListenContent(d) {
     return `
     <div style="display:flex; gap:10px;">
-        <button class="btn" onclick="speak('${d.commute_content.english_text.replace(/'/g, "\\'")}')">▶️ Play</button>
+        <button class="btn" onclick="speak('${jsAttr(d.commute_content.english_text)}')">▶️ Play</button>
         <button class="btn ${state.isLooping?'btn-accent':'btn-outline'}" onclick="toggleLoop()">${state.isLooping?'🔁 Stop':'🔁 Loop'}</button>
+    </div>
+    <div style="display:flex; gap:10px; align-items:center; margin-top:10px;">
+        <select onchange="setLoopAll(this.value)" style="flex:1;">
+            <option value="one" ${state.loopAll?'':'selected'}>Loop: 例文のみ</option>
+            <option value="all" ${state.loopAll?'selected':''}>Loop: 例文+練習文(全6文)</option>
+        </select>
+        <span id="loop-now" style="font-size:0.8rem; color:var(--subtext); min-width:44px; text-align:right;">${state.isLooping ? (state.loopIdx % loopItems().length + 1) + ' / ' + loopItems().length : ''}</span>
     </div>
     <div style="margin-top:15px; background:var(--bg); padding:10px; border-radius:8px; border:1px solid var(--border);">
         <div style="font-size:0.8rem; color:var(--subtext); font-weight:bold; margin-bottom:5px;">Speed: <span id="commute-rate-val">${Number(state.voiceRate).toFixed(1)}</span>x</div>
@@ -664,9 +1389,9 @@ function renderSpeakContent(d) {
         <div class="drill-card">
             <div style="font-weight:bold; font-size:0.9rem; margin-bottom:8px;">${i+1}. ${item.jp} ${badge}</div>
             <div style="display:flex; gap:10px; margin-bottom:10px;">
-                <button class="btn btn-mic" id="btn-m1-mic-${i}" onclick="startDictation('${item.en.replace(/'/g,"\\'")}', 'm1-res-${i}', 'btn-m1-mic-${i}')" style="flex:1">🎙️ Speak</button>
+                <button class="btn btn-mic" id="btn-m1-mic-${i}" onclick="startDictation('${jsAttr(item.en)}', 'm1-res-${i}', 'btn-m1-mic-${i}')" style="flex:1">🎙️ Speak</button>
                 <button class="btn btn-outline" style="flex:1" onclick="document.getElementById('m1-ans-${i}').classList.remove('hidden')">👁️ Answer</button>
-                <button class="btn btn-accent" onclick="speak('${item.en.replace(/'/g,"\\'")}')" style="width:50px; padding:0;">🔊</button>
+                <button class="btn btn-accent" onclick="speak('${jsAttr(item.en)}')" style="width:50px; padding:0;">🔊</button>
             </div>
             <div id="m1-res-${i}" class="hidden score-box"></div>
             <div id="m1-ans-${i}" class="hidden" style="margin-top:8px;">
@@ -680,6 +1405,63 @@ function renderSpeakContent(d) {
         </div>`;
     });
     return html;
+}
+
+// --- ACTIVITY STATS (v5.1) ---
+function logDayKey(t) { const d = new Date(t); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+function summarizeLog(list) {
+    const n = list.length;
+    if (!n) return { n: 0, good: null, to: 0, rt: null, hint: null };
+    const rts = list.map(e => e.rt).filter(x => typeof x === 'number').sort((a, b) => a - b);
+    let rt = null;
+    if (rts.length) { const k = Math.floor(rts.length / 2); rt = rts.length % 2 ? rts[k] : (rts[k - 1] + rts[k]) / 2; }
+    return {
+        n, good: Math.round(list.filter(e => e.r === 'good').length / n * 100),
+        to: list.filter(e => e.to).length, rt,
+        hint: Math.round(list.filter(e => e.h).length / n * 100)
+    };
+}
+function fmtRt(ms) { return (ms === null || ms === undefined) ? '–' : (ms / 1000).toFixed(1) + 's'; }
+function logRow(label, s) {
+    const dash = '<td style="text-align:right; padding:3px 4px; color:var(--subtext);">–</td>';
+    if (!s.n) return `<tr><td style="padding:3px 4px;">${label}</td>${dash}${dash}${dash}${dash}${dash}</tr>`;
+    const c = v => `<td style="text-align:right; padding:3px 4px;">${v}</td>`;
+    return `<tr><td style="padding:3px 4px;">${label}</td>${c(s.n)}${c(s.good + '%')}${c(s.to)}${c(fmtRt(s.rt))}${c(s.hint + '%')}</tr>`;
+}
+function logTable(rows) {
+    const th = t => `<th style="text-align:right; padding:3px 4px; color:var(--subtext); font-weight:600;">${t}</th>`;
+    return `<table style="width:100%; border-collapse:collapse; font-size:0.78rem;"><tr><th></th>${th('回数')}${th('Good')}${th('T.O.')}${th('反応')}${th('ヒント')}</tr>${rows}</table>`;
+}
+function renderLogStats() {
+    const DAY = 24 * 60 * 60 * 1000, now = Date.now();
+    const log = state.log || [];
+    if (log.length === 0) {
+        return `<div class="card" style="font-size:0.85rem; color:var(--subtext);">📈 Activity: Tension Mode / Test を実施すると、日別・週別・Step別の集計がここに出ます。</div>`;
+    }
+    const core = log.filter(e => e.m === 's3' || e.m === 'test');
+    const since28 = now - 28 * DAY;
+    const days28 = new Set(log.filter(e => ['s1', 's2', 's3', 'test', 'dlg'].includes(e.m) && e.t > since28).map(e => logDayKey(e.t)));
+    let dayRows = '';
+    for (let k = 0; k < 7; k++) {
+        const key = logDayKey(now - k * DAY);
+        dayRows += logRow(k === 0 ? 'Today' : key.slice(5), summarizeLog(core.filter(e => logDayKey(e.t) === key)));
+    }
+    const weekLabels = ['直近7日', '8〜14日前', '15〜21日前', '22〜28日前'];
+    let weekRows = '';
+    for (let w = 0; w < 4; w++) {
+        weekRows += logRow(weekLabels[w], summarizeLog(core.filter(e => e.t <= now - w * 7 * DAY && e.t > now - (w + 1) * 7 * DAY)));
+    }
+    const stepRows = [['s1', 'Step 1'], ['s2', 'Step 2'], ['s3', 'Step 3'], ['test', 'Test'], ['dlg', 'Talk']]
+        .map(([m, label]) => logRow(label, summarizeLog(log.filter(e => e.m === m && e.t > since28)))).join('');
+    const sub = 'font-size:0.8rem; font-weight:bold; margin:12px 0 4px;';
+    return `<div class="card">
+        <h3 style="margin:0 0 4px 0;">📈 Activity</h3>
+        <div style="font-size:0.8rem; color:var(--subtext);">実施日数(直近28日): <b>${days28.size}</b> / 28</div>
+        <div style="${sub}">日別(Step 3 + Test)</div>${logTable(dayRows)}
+        <div style="${sub}">週別(Step 3 + Test)</div>${logTable(weekRows)}
+        <div style="${sub}">Step別(直近28日)</div>${logTable(stepRows)}
+        <div style="font-size:0.7rem; color:var(--subtext); margin-top:8px;">Good = 全単語が語順どおり。T.O. = 時間切れ。反応 = マイクが開いてから発話検出までの中央値。ヒント = Keyword Hintを開いた割合。</div>
+    </div>`;
 }
 
 function renderStats(c) {
@@ -715,6 +1497,7 @@ function renderStats(c) {
         </div>
         <div style="font-size:0.8rem; color:var(--subtext); margin-top:10px;">未テスト: ${untested} / 全${total}フレーズ</div>
     </div>`;
+    html += renderLogStats();
 
     if (weakPhrases.length > 0) {
         html += `<h3 style="margin-top:25px; border-bottom:2px solid var(--danger); display:inline-block;">🔥 Needs Work (弱点: ${weakPhrases.length})</h3>`;
@@ -738,30 +1521,37 @@ function updatePrompt() {
     const topic = document.getElementById('p-topic')?.value || "Business";
     const level = document.getElementById('p-level')?.value || "Intermediate";
     const qty = document.getElementById('p-qty')?.value || 3; 
+    const category = document.getElementById('p-category')?.value || state.promptCategory || 'Business';
 
-    state.promptTopic = topic; state.promptLevel = level; state.promptQty = qty;
-    localStorage.setItem('le_prompt_state', JSON.stringify({topic, level, qty}));
+    state.promptTopic = topic; state.promptLevel = level; state.promptQty = qty; state.promptCategory = category;
+    localStorage.setItem('le_prompt_state', JSON.stringify({topic, level, qty, category}));
 
     // 💡 v5.0向け：新プロンプト (situation_en と keywords を追加)
     const p = `あなたは英語教材作成のプロです。以下の仕様で学習データを作成してください。
 ## 生成モード
 テーマ: ${topic}
+カテゴリ: ${category}
 レベル: ${level}
 作成数: ${qty}セット（1セットにつき、メイン例文1つ＋関連ドリル5つ）
 自然な表現で作成してください。
 
 ## 【絶対遵守ルール】
 1. 出力は以下のJSON配列形式のみ。解説やマークダウン以外のテキストは絶対に含めない。
-2. english_text と chunks の連結結果は完全一致させること。
+2. chunks は意味のまとまりをスラッシュ(/)で区切った文字列にし、スラッシュを除くと english_text と完全一致させること。
 3. "drills" 配列の中身は必ず5個作成すること。
-4. "situation_en"は、その英語を発するべき状況を「英語」で説明すること（例: You are declining an invitation.）
+4. "situation_en"は、その英語を発するべき状況を「英語」で説明すること（例: You are declining an invitation.）。答えの英文そのものは書かない。
 5. "keywords"は、発話のヒントになる英単語を「配列」で2〜3個入れること。
+6. 英文はすべて話し言葉の長さにする。メイン例文は1〜2文・25語以内、ドリルは1文・15語以内。短縮形(I'm, we'll, can't)を自然に使う。
+7. 英文の中にダブルクォーテーション、& 、スラッシュ記号、特殊記号は使わない。数字はアラビア数字でも英単語でもよい。
+8. 毎回同じ書き出し(Sure, / Well, など)を連発せず、実際の仕事で使う自然な表現にする。ドリルはメイン例文の言い回しを別の場面で使うものにする。
+9. "id" は他と重複しない文字列にする。"summary" は日本語か英語の短いタイトル(40文字以内)。
 
 \`\`\`json
 [
   {
     "id": "gen_123456789", 
-    "category": "${topic}",
+    "category": "${category}",
+    "topic": "${topic}",
     "level": "${level}",
     "progress": { "listen": false, "speak": false },
     "commute_content": { 
@@ -789,28 +1579,88 @@ function copyPrompt() {
     navigator.clipboard.writeText(document.getElementById('p-area').value).then(() => alert('Copied!')); 
 }
 
-function loadJsonData() { 
-    try { 
-        let rawText = document.getElementById('data-input').value.trim();
-        const startIdx = rawText.indexOf('[');
-        const endIdx = rawText.lastIndexOf(']');
-        if(startIdx !== -1 && endIdx !== -1) {
-            rawText = rawText.substring(startIdx, endIdx + 1);
-        }
-        
-        const d = JSON.parse(rawText); 
-        if (Array.isArray(d)) { 
-            if (confirm('Add to existing?')) state.data = [...state.data, ...d]; else state.data = d; 
-            saveData(); init(); 
-            document.getElementById('data-input').value = ''; 
-            setMode('list'); 
-        } else {
-            alert('データが配列形式ではありません。');
-        }
-    } catch(e) { 
-        alert('Invalid JSON: データ形式が正しくありません。\n余計なテキストが含まれていないか確認してください。'); 
-        console.error(e);
-    } 
+function validateLesson(d) {
+    const errs = [];
+    if (!d || typeof d !== 'object') return ['not an object'];
+    const c = d.commute_content;
+    if (!c || typeof c !== 'object') return ['commute_content missing'];
+    ['english_text', 'japanese_translation', 'summary'].forEach(k => { if (typeof c[k] !== 'string' || !c[k].trim()) errs.push('commute_content.' + k + ' missing'); });
+    const dr = d.home_content && d.home_content.drills;
+    if (!Array.isArray(dr) || dr.length === 0) errs.push('home_content.drills missing');
+    else dr.forEach((x, i) => { if (!x || typeof x.english !== 'string' || !x.english.trim() || typeof x.japanese !== 'string' || !x.japanese.trim()) errs.push('drill ' + (i + 1) + ': english/japanese missing'); });
+    if (Array.isArray(dr) && dr.length !== 5 && !errs.length) errs.push('drills is ' + dr.length + ' (expected 5)');
+    return errs;
+}
+function lessonKey(d) { return String((d.commute_content && d.commute_content.english_text) || '').toLowerCase().replace(/\s+/g, ' ').trim(); }
+
+function loadJsonData(replaceAll) {
+    let raw = (document.getElementById('data-input').value || '').trim();
+    const s = raw.indexOf('['), e = raw.lastIndexOf(']');
+    if (s !== -1 && e !== -1) raw = raw.substring(s, e + 1);
+    let arr;
+    try { arr = JSON.parse(raw); } catch (err) { alert('Invalid JSON: データ形式が正しくありません。\n余計なテキストが含まれていないか確認してください。'); console.error(err); return; }
+    if (!Array.isArray(arr)) return alert('データが配列形式ではありません。');
+    const keys = new Set(replaceAll ? [] : state.data.map(lessonKey)), ids = new Set(replaceAll ? [] : state.data.map(x => x.id));
+    const ok = [], bad = []; let dup = 0;
+    arr.forEach((d, i) => {
+        const errs = validateLesson(d);
+        if (errs.length) { bad.push('#' + (i + 1) + ' ' + ((d && d.commute_content && d.commute_content.summary) || '') + ': ' + errs[0]); return; }
+        const k = lessonKey(d);
+        if (keys.has(k) || (d.id && ids.has(d.id))) { dup++; return; }
+        keys.add(k); if (d.id) ids.add(d.id);
+        d.id = d.id || ('gen_' + Date.now() + '_' + i);
+        d.category = d.category || 'Business'; d.level = d.level || 'Intermediate';
+        if (!d.progress) d.progress = { listen: false, speak: false };
+        ok.push(d);
+    });
+    if (ok.length === 0) return alert('追加できるレッスンがありません。\n重複 ' + dup + ' 件 ／ 不正 ' + bad.length + ' 件' + (bad.length ? '\n' + bad.slice(0, 5).join('\n') : ''));
+    const head = replaceAll
+        ? '現在のレッスン ' + state.data.length + ' 件を削除して、' + ok.length + ' 件に置き換えます。(進捗の記録も失われます)\n先にバックアップを取りましたか？'
+        : ok.length + ' 件を既存に追加します。';
+    const msg = head + '\n重複スキップ ' + dup + ' 件 ／ 不正 ' + bad.length + ' 件' + (bad.length ? '\n' + bad.slice(0, 3).join('\n') : '');
+    if (!confirm(msg)) return;
+    state.data = replaceAll ? ok : state.data.concat(ok);
+    saveData(); init();
+    document.getElementById('data-input').value = '';
+    setMode('list');
+}
+
+// --- BACKUP (v5.1) ---
+function buildBackup() {
+    return JSON.stringify({
+        app: 'link-english', version: '5.4', exportedAt: new Date().toISOString(),
+        data: state.data, log: state.log, dialogs: state.dialogs,
+        prefs: { theme: state.theme, voiceRate: state.voiceRate, prompt: { topic: state.promptTopic, level: state.promptLevel, qty: state.promptQty } }
+    });
+}
+function exportBackup() {
+    const blob = new Blob([buildBackup()], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'link-english-backup-' + logDayKey(Date.now()) + '.json';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+function copyBackup() {
+    navigator.clipboard.writeText(buildBackup()).then(() => alert('Copied!')).catch(() => alert('Copy failed'));
+}
+function importBackup(ev) {
+    const f = ev.target.files && ev.target.files[0];
+    if (!f) return;
+    const r = new FileReader();
+    r.onload = () => {
+        try {
+            const b = JSON.parse(r.result);
+            if (!b || !Array.isArray(b.data)) throw new Error('format');
+            const logs = Array.isArray(b.log) ? b.log : [];
+            if (!confirm('現在のデータをバックアップで置き換えますか？(レッスン ' + b.data.length + ' 件 / 履歴 ' + logs.length + ' 件)')) return;
+            state.data = b.data; state.log = logs;
+            if (Array.isArray(b.dialogs)) state.dialogs = b.dialogs.filter(d => validateDialog(d).length === 0).map(normalizeDialog);
+            saveData(); saveLog(); saveDialogs(); init(); setMode('list');
+        } catch (e) { alert('Invalid backup file'); console.error(e); }
+    };
+    r.readAsText(f);
+    ev.target.value = '';
 }
 
 function renderSettings(c) {
@@ -819,7 +1669,11 @@ function renderSettings(c) {
     <div class="card">
         <h2>🤖 AI Prompt Builder v5.0</h2>
         <label>Topic</label>
-        <input type="text" id="p-topic" value="${state.promptTopic}" oninput="updatePrompt()">
+        <input type="text" id="p-topic" value="${escAttr(state.promptTopic)}" oninput="updatePrompt()">
+        <label style="margin-top:10px;">Category</label>
+        <select id="p-category" onchange="updatePrompt()">
+            ${['Business', 'Daily', 'Travel', 'TOEIC'].map(c => `<option ${state.promptCategory === c ? 'selected' : ''}>${c}</option>`).join('')}
+        </select>
         
         <div class="form-row" style="margin-top:10px;">
             <div class="form-col">
@@ -840,10 +1694,15 @@ function renderSettings(c) {
         <button class="btn btn-outline" onclick="copyPrompt()">📋 Copy Prompt</button>
     </div>
     
+    ${dialogConfigCard()}
+
     <div class="card">
         <h2>Data & Voice</h2>
         <textarea id="data-input" placeholder="Paste JSON from Gemini here..."></textarea>
-        <button class="btn" onclick="loadJsonData()" style="margin-top:10px;">Load Data</button>
+        <div style="display:flex; gap:8px; margin-top:10px;">
+            <button class="btn" style="flex:2;" onclick="loadJsonData()">Add Lessons</button>
+            <button class="btn-outline" style="flex:1; border-color:var(--danger); color:var(--danger);" onclick="loadJsonData(true)">Replace All</button>
+        </div>
         
         <div style="margin-top:20px;">
             <label>Voice</label>
@@ -860,10 +1719,21 @@ function renderSettings(c) {
             </div>
         </div>
         
-        <button class="btn-outline" onclick="if(confirm('本当にすべて削除しますか？')){localStorage.removeItem('le_data'); location.reload();}" style="margin-top:30px; border-color:var(--danger); color:var(--danger);">⚠️ Reset All Data</button>
+        <div style="margin-top:25px;">
+            <label>Backup (lessons + history)</label>
+            <div style="display:flex; gap:8px; margin-top:4px;">
+                <button class="btn btn-outline" style="flex:1;" onclick="exportBackup()">⬇️ Export</button>
+                <button class="btn btn-outline" style="flex:1;" onclick="copyBackup()">📋 Copy</button>
+            </div>
+            <label style="margin-top:10px;">Import (.json)</label>
+            <input type="file" accept="application/json,.json" onchange="importBackup(event)">
+        </div>
+
+        <button class="btn-outline" onclick="if(confirm('バックアップは取りましたか？本当にすべて削除しますか？')){localStorage.removeItem('le_data'); localStorage.removeItem('le_log'); localStorage.removeItem('le_dialogs'); location.reload();}" style="margin-top:30px; border-color:var(--danger); color:var(--danger);">⚠️ Reset All Data</button>
     </div>`;
     
     setTimeout(updatePrompt, 50);
+    setTimeout(updateDialogPrompt, 50);
 }
 
 function updateTestBadge() {
