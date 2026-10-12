@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Link English v5.4 (Concept-to-Speech)</title>
+    <title>Link English v5.5 (Concept-to-Speech)</title>
     
     <meta name="theme-color" content="#3b82f6">
     <meta name="mobile-web-app-capable" content="yes">
@@ -100,7 +100,7 @@
 <body>
 
 <header>
-    <div class="app-title">Link English v5.4</div>
+    <div class="app-title">Link English v5.5</div>
     <button class="theme-toggle" onclick="toggleTheme()">🌙</button>
 </header>
 
@@ -171,7 +171,7 @@ document.getElementById('my-manifest').setAttribute('href', 'data:application/ma
 let state = { 
     data: [], currentIndex: 0, mode: 'list', lessonTab: 'commute',
     theme: 'light', showText: false, selectedVoiceIndex: -1, voiceRate: 1.0, 
-    promptCategory: 'Business', isLooping: false, loopAll: false, loopIdx: 0, loopCur: 0, promptTopic: "Business", promptLevel: "Intermediate", promptQty: 3, log: [],
+    promptCategory: 'Business', isLooping: false, loopAll: false, loopIdx: 0, loopCur: 0, loopStartAt: 0, promptTopic: "Business", promptLevel: "Intermediate", promptQty: 3, log: [],
     listFilter: 'all', listSort: 'order', listQuery: '', visible: [],
     dialogs: [], dlgIndex: 0, talkSecs: 10, talkShowText: false,
     dlgScenario: '', dlgLevel: 'Intermediate', dlgTurns: 8, dlgQty: 2
@@ -307,7 +307,12 @@ function openLesson(i) { dlAbort(); state.currentIndex = i; state.mode = 'lesson
 function setLessonTab(t) { state.lessonTab = t; stopAudio(); render(); }
 function toggleTheme() { state.theme = state.theme === 'light' ? 'dark' : 'light'; document.documentElement.setAttribute('data-theme', state.theme); localStorage.setItem('le_theme', state.theme); render(); }
 function saveData() { localStorage.setItem('le_data', JSON.stringify(state.data)); }
-function toggleProgress(type) { state.data[state.currentIndex].progress[type] = !state.data[state.currentIndex].progress[type]; saveData(); render(); }
+function toggleProgress(type) {
+    const d = state.data[state.currentIndex];
+    d.progress[type] = !d.progress[type];
+    if (type === 'listen' && d.progress.listen) addLog({ m: 'lis', l: (d.commute_content.summary || '').slice(0, 60), p: -1, du: 0, dn: 1 });
+    saveData(); render();
+}
 
 // --- AUDIO LOGIC ---
 function speak(txt, callback) { 
@@ -320,6 +325,11 @@ function speak(txt, callback) {
 }
 
 function stopAudio() { 
+    if (state.isLooping && state.loopStartAt) {
+        const sec = Math.round((Date.now() - state.loopStartAt) / 1000), d = state.data[state.currentIndex];
+        if (sec >= 10 && d) addLog({ m: 'lis', l: (d.commute_content.summary || '').slice(0, 60), p: -1, du: sec });
+    }
+    state.loopStartAt = 0;
     state.isLooping = false; 
     window.speechSynthesis.cancel(); 
     disableBackgroundPlayback();
@@ -338,7 +348,7 @@ function toggleLoop() {
     if (state.isLooping) {
         stopAudio();
     } else {
-        state.isLooping = true; state.loopIdx = 0;
+        state.isLooping = true; state.loopIdx = 0; state.loopStartAt = Date.now();
         enableBackgroundPlayback();
         render();
         runRecursiveLoop();
@@ -751,6 +761,7 @@ function render() {
     else if (state.mode === 'settings') { document.getElementById('nav-config').classList.add('active'); renderSettings(app); }
     else if (state.mode === 'lesson') { document.getElementById('nav-list').classList.add('active'); renderLesson(app); }
     else if (state.mode === 'stats') { document.getElementById('nav-stats').classList.add('active'); renderStats(app); }
+    else if (state.mode === 'edit') { document.getElementById('nav-list').classList.add('active'); renderEditLesson(app); }
     else if (state.mode === 'talk') { document.getElementById('nav-talk').classList.add('active'); renderTalkList(app); }
     else if (state.mode === 'dialog') { document.getElementById('nav-talk').classList.add('active'); renderDialog(app); }
     else if (state.mode === 'test') { document.getElementById('nav-test').classList.add('active'); }
@@ -837,6 +848,7 @@ function renderList(c) {
     const dueTotal = sts.reduce((a, s) => a + s.due, 0);
     const chip = ([k, label]) => `<button class="chip ${state.listFilter === k ? 'chip-on' : ''}" onclick="setListFilter('${k}')">${label} ${cnt[k]}</button>`;
     c.innerHTML = `
+    ${backupBannerHtml()}
     <div style="font-size:0.8rem; color:var(--subtext); margin-bottom:8px;">全${cnt.all} ・ 完了 ${cnt.done} ・ 進行中 ${doing} ・ 未着手 ${fresh} ・ 復習期限 <b style="color:${dueTotal ? 'var(--danger)' : 'inherit'}">${dueTotal}</b></div>
     <div style="display:flex; gap:8px; margin-bottom:8px;">
         <button class="btn" style="flex:1; padding:10px;" onclick="openNextLesson()">▶ 続きから</button>
@@ -1334,7 +1346,74 @@ function renderLesson(c) {
     <div style="display:flex;justify-content:space-between;margin-top:20px">
         <button class="btn-outline" style="width:45%" onclick="goLesson(-1)" ${lessonNav().prev===null?'disabled':''}>← Prev</button>
         <button class="btn-outline" style="width:45%" onclick="goLesson(1)" ${lessonNav().next===null?'disabled':''}>Next →</button>
+    </div>
+    <div style="display:flex; gap:10px; margin-top:15px;">
+        <button class="btn-outline" style="flex:1; padding:8px; font-size:0.85rem;" onclick="openEditLesson()">✏️ Edit</button>
+        <button class="btn-outline" style="flex:1; padding:8px; font-size:0.85rem; border-color:var(--danger); color:var(--danger);" onclick="deleteLesson()">🗑 Delete</button>
     </div>`;
+}
+
+// --- EDIT / DELETE LESSON (v5.5) ---
+function openEditLesson() { stopAudio(); state.mode = 'edit'; render(); }
+function deleteLesson() {
+    const d = state.data[state.currentIndex];
+    if (!d || !confirm('「' + d.commute_content.summary + '」を削除しますか？\n(このレッスンの進捗は失われます。履歴は残ります)')) return;
+    stopAudio();
+    state.data.splice(state.currentIndex, 1);
+    saveData();
+    state.currentIndex = Math.max(0, Math.min(state.currentIndex, state.data.length - 1));
+    setMode('list');
+}
+function editFields(pfx, label, p, en, ja) {
+    return `<div class="card">
+        <div style="font-weight:bold; font-size:0.85rem; margin-bottom:6px;">${label}</div>
+        <label>English</label><textarea id="${pfx}-en" style="height:60px;">${escHtml(en)}</textarea>
+        <label style="margin-top:8px;">日本語</label><textarea id="${pfx}-ja" style="height:50px;">${escHtml(ja)}</textarea>
+        <label style="margin-top:8px;">Situation (English)</label><input type="text" id="${pfx}-sit" value="${escAttr(p.situation_en || '')}">
+        <label style="margin-top:8px;">Keywords (カンマ区切り)</label><input type="text" id="${pfx}-kw" value="${escAttr((p.keywords || []).join(', '))}">
+        ${pfx === 'e-c' ? `<label style="margin-top:8px;">Chunks (スラッシュ区切り。空欄なら英文のまま)</label><textarea id="e-chunks" style="height:50px;">${escHtml(p.chunks || '')}</textarea>` : ''}
+    </div>`;
+}
+function renderEditLesson(c) {
+    const d = state.data[state.currentIndex];
+    if (!d) { setMode('list'); return; }
+    const cc = d.commute_content;
+    c.innerHTML = `
+    <div class="lesson-header"><button class="btn-outline" onclick="openLesson(state.currentIndex)" style="width:auto;padding:5px 10px;">← Cancel</button><div style="font-weight:bold">Edit</div><div style="width:50px"></div></div>
+    <div class="card"><label>Title (summary)</label><input type="text" id="e-summary" value="${escAttr(cc.summary || '')}">
+        <label style="margin-top:8px;">Category</label>
+        <select id="e-cat">${['Business', 'Daily', 'Travel', 'TOEIC'].map(x => `<option ${d.category === x ? 'selected' : ''}>${x}</option>`).join('')}${['Business', 'Daily', 'Travel', 'TOEIC'].includes(d.category) ? '' : `<option selected>${escHtml(d.category || '')}</option>`}</select>
+    </div>
+    ${editFields('e-c', '例文', cc, cc.english_text || '', cc.japanese_translation || '')}
+    ${(d.home_content.drills || []).map((dr, i) => editFields('e-d' + i, '練習文 ' + (i + 1), dr, dr.english || '', dr.japanese || '')).join('')}
+    <div style="font-size:0.75rem; color:var(--subtext); margin-bottom:10px;">英文を変えたフレーズは、判定の記録(丸の色・復習日)をリセットします。</div>
+    <button class="btn" style="font-weight:bold;" onclick="saveEditLesson()">Save</button>`;
+}
+function saveEditLesson() {
+    const d = state.data[state.currentIndex], v = id => (document.getElementById(id) || {}).value || '';
+    const fresh = () => ({ last_score: null, result: null, interval: 0, next_review: 0, tested_in_m2: false });
+    const apply = (obj, pfx, enKey, jaKey) => {
+        const en = v(pfx + '-en').trim().replace(/\s+/g, ' '), ja = v(pfx + '-ja').trim();
+        if (!en || !ja) return false;
+        if (en !== obj[enKey]) obj.stats = fresh();
+        obj[enKey] = en; obj[jaKey] = ja;
+        obj.situation_en = v(pfx + '-sit').trim() || obj.situation_en;
+        obj.keywords = v(pfx + '-kw').split(',').map(s => s.trim()).filter(Boolean);
+        return true;
+    };
+    const summary = v('e-summary').trim();
+    if (!summary) return alert('タイトルを入力してください。');
+    const cc = d.commute_content, drills = d.home_content.drills || [];
+    const enNew = v('e-c-en').trim().replace(/\s+/g, ' ');
+    let chunks = v('e-chunks').trim();
+    if (!chunks || enNew !== cc.english_text && chunks === (cc.chunks || '').trim()) chunks = enNew;   // 英文を直して区切りが古いままなら、英文に揃える
+    if (chunks.replace(/[\/\s]/g, '') !== enNew.replace(/\s/g, '')) return alert('Chunksは、スラッシュを除くと例文と同じになるようにしてください。');
+    if (!apply(cc, 'e-c', 'english_text', 'japanese_translation')) return alert('例文の英語と日本語を入力してください。');
+    cc.chunks = chunks; cc.summary = summary;
+    for (let i = 0; i < drills.length; i++) if (!apply(drills[i], 'e-d' + i, 'english', 'japanese')) return alert('練習文 ' + (i + 1) + ' の英語と日本語を入力してください。');
+    d.category = v('e-cat') || d.category;
+    saveData();
+    openLesson(state.currentIndex);
 }
 
 function renderListenContent(d) {
@@ -1432,6 +1511,44 @@ function logTable(rows) {
     const th = t => `<th style="text-align:right; padding:3px 4px; color:var(--subtext); font-weight:600;">${t}</th>`;
     return `<table style="width:100%; border-collapse:collapse; font-size:0.78rem;"><tr><th></th>${th('回数')}${th('Good')}${th('T.O.')}${th('反応')}${th('ヒント')}</tr>${rows}</table>`;
 }
+// --- TREND CHARTS (v5.5): 直近8週の推移。1グラフ1系列、y軸は1本 ---
+function trendChart(title, note, pts, fmt, yMax) {
+    const W = 320, H = 130, L = 34, R = 12, T = 12, B = 22, n = pts.length;
+    const x = i => L + (W - L - R) * (n === 1 ? 0.5 : i / (n - 1));
+    const y = v => T + (H - T - B) * (1 - Math.min(v, yMax) / yMax);
+    const has = pts.filter(p => p.v !== null).length;
+    if (!has) return `<div style="margin-top:10px;"><div style="font-size:0.8rem; font-weight:bold;">${title}</div><div style="font-size:0.75rem; color:var(--subtext); padding:14px 0;">各週3回以上のデータがたまると表示されます。</div></div>`;
+    const grid = [0, 0.5, 1].map(f => { const gy = y(yMax * f); return `<line x1="${L}" x2="${W - R}" y1="${gy}" y2="${gy}" stroke="var(--border)" stroke-width="1"/><text x="${L - 4}" y="${gy + 3}" text-anchor="end" font-size="9" fill="var(--subtext)">${fmt(yMax * f)}</text>`; }).join('');
+    let segs = [], cur = [];
+    pts.forEach((p, i) => { if (p.v === null) { if (cur.length) segs.push(cur); cur = []; } else cur.push(x(i).toFixed(1) + ',' + y(p.v).toFixed(1)); });
+    if (cur.length) segs.push(cur);
+    const lines = segs.filter(s => s.length > 1).map(s => `<polyline points="${s.join(' ')}" fill="none" stroke="var(--primary)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`).join('');
+    const dots = pts.map((p, i) => p.v === null ? '' : `<circle cx="${x(i).toFixed(1)}" cy="${y(p.v).toFixed(1)}" r="4" fill="var(--primary)" stroke="var(--card)" stroke-width="2"><title>${p.tip}</title></circle>`).join('');
+    const xl = [0, Math.floor((n - 1) / 2), n - 1].map(i => `<text x="${x(i)}" y="${H - 6}" text-anchor="${i === 0 ? 'start' : i === n - 1 ? 'end' : 'middle'}" font-size="9" fill="var(--subtext)">${pts[i].label}</text>`).join('');
+    return `<div style="margin-top:10px;"><div style="font-size:0.8rem; font-weight:bold;">${title}</div>
+        <svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="${title}" style="display:block;">${grid}${lines}${dots}${xl}</svg>
+        <div style="font-size:0.7rem; color:var(--subtext);">${note}</div></div>`;
+}
+function trendCharts(log) {
+    const DAY = 86400000, now = Date.now(), N = 8, MIN = 3;
+    const core = log.filter(e => e.m === 's3' || e.m === 'test' || e.m === 'dlg');
+    const good = [], rt = [];
+    for (let k = N - 1; k >= 0; k--) {
+        const to = now - k * 7 * DAY, from = to - 7 * DAY;
+        const ev = core.filter(e => e.t > from && e.t <= to);
+        const d0 = new Date(from + 1), label = (d0.getMonth() + 1) + '/' + d0.getDate();
+        const rng = label + '〜' + (new Date(to).getMonth() + 1) + '/' + new Date(to).getDate();
+        if (ev.length >= MIN) { const g = Math.round(ev.filter(e => e.r === 'good').length / ev.length * 100); good.push({ label, v: g, tip: rng + ': Good ' + g + '% (n=' + ev.length + ')' }); }
+        else good.push({ label, v: null });
+        const rts = ev.map(e => e.rt).filter(x => typeof x === 'number').sort((a, b) => a - b);
+        if (rts.length >= MIN) { const m = rts.length % 2 ? rts[(rts.length - 1) / 2] : (rts[rts.length / 2 - 1] + rts[rts.length / 2]) / 2; rt.push({ label, v: m / 1000, tip: rng + ': 反応 ' + (m / 1000).toFixed(1) + '秒 (n=' + rts.length + ')' }); }
+        else rt.push({ label, v: null });
+    }
+    const maxRt = Math.max(3, Math.ceil(Math.max(...rt.filter(p => p.v !== null).map(p => p.v), 0) * 1.15));
+    return trendChart('Good率の推移(週・直近8週)', 'Step 3 + Test + Talk。1週3回未満は点を打ちません。', good, v => Math.round(v) + '%', 100)
+        + trendChart('反応時間の推移(週の中央値・秒)', '低いほど速い。Step 3 + Test + Talk。', rt, v => v.toFixed(v < 10 ? 1 : 0), maxRt);
+}
+
 function renderLogStats() {
     const DAY = 24 * 60 * 60 * 1000, now = Date.now();
     const log = state.log || [];
@@ -1440,7 +1557,7 @@ function renderLogStats() {
     }
     const core = log.filter(e => e.m === 's3' || e.m === 'test');
     const since28 = now - 28 * DAY;
-    const days28 = new Set(log.filter(e => ['s1', 's2', 's3', 'test', 'dlg'].includes(e.m) && e.t > since28).map(e => logDayKey(e.t)));
+    const days28 = new Set(log.filter(e => ['s1', 's2', 's3', 'test', 'dlg', 'lis'].includes(e.m) && e.t > since28).map(e => logDayKey(e.t)));
     let dayRows = '';
     for (let k = 0; k < 7; k++) {
         const key = logDayKey(now - k * DAY);
@@ -1454,9 +1571,13 @@ function renderLogStats() {
     const stepRows = [['s1', 'Step 1'], ['s2', 'Step 2'], ['s3', 'Step 3'], ['test', 'Test'], ['dlg', 'Talk']]
         .map(([m, label]) => logRow(label, summarizeLog(log.filter(e => e.m === m && e.t > since28)))).join('');
     const sub = 'font-size:0.8rem; font-weight:bold; margin:12px 0 4px;';
+    const lis = log.filter(e => e.m === 'lis' && e.t > since28);
+    const lisMin = Math.round(lis.reduce((a, e) => a + (e.du || 0), 0) / 6) / 10;
     return `<div class="card">
         <h3 style="margin:0 0 4px 0;">📈 Activity</h3>
         <div style="font-size:0.8rem; color:var(--subtext);">実施日数(直近28日): <b>${days28.size}</b> / 28</div>
+        <div style="font-size:0.8rem; color:var(--subtext);">Listen(Loop・Listen Done): <b>${lis.length}</b> 回 ／ Loop計 <b>${lisMin}</b> 分(直近28日)</div>
+        ${trendCharts(log)}
         <div style="${sub}">日別(Step 3 + Test)</div>${logTable(dayRows)}
         <div style="${sub}">週別(Step 3 + Test)</div>${logTable(weekRows)}
         <div style="${sub}">Step別(直近28日)</div>${logTable(stepRows)}
@@ -1628,10 +1749,28 @@ function loadJsonData(replaceAll) {
 // --- BACKUP (v5.1) ---
 function buildBackup() {
     return JSON.stringify({
-        app: 'link-english', version: '5.4', exportedAt: new Date().toISOString(),
+        app: 'link-english', version: '5.5', exportedAt: new Date().toISOString(),
         data: state.data, log: state.log, dialogs: state.dialogs,
         prefs: { theme: state.theme, voiceRate: state.voiceRate, prompt: { topic: state.promptTopic, level: state.promptLevel, qty: state.promptQty } }
     });
+}
+function markBackup() { try { localStorage.setItem('le_last_backup', String(Date.now())); } catch (e) {} }
+function backupAgeDays() {
+    let last = 0; try { last = parseInt(localStorage.getItem('le_last_backup') || '0') || 0; } catch (e) {}
+    return last ? Math.floor((Date.now() - last) / 86400000) : null;
+}
+function snoozeBackup() { try { localStorage.setItem('le_backup_snooze', String(Date.now() + 86400000)); } catch (e) {} render(); }
+function backupBannerHtml() {
+    if (state.data.length === 0 && state.log.length === 0) return '';
+    let snooze = 0; try { snooze = parseInt(localStorage.getItem('le_backup_snooze') || '0') || 0; } catch (e) {}
+    const age = backupAgeDays();
+    if ((age !== null && age < 7) || Date.now() < snooze) return '';
+    const msg = age === null ? 'バックアップがまだありません。' : '最後のバックアップから ' + age + ' 日たっています。';
+    return `<div class="card" style="padding:10px 12px; margin-bottom:10px; border-left:4px solid var(--accent); font-size:0.85rem;">
+        <div style="font-weight:bold;">⚠ ${msg}</div>
+        <div style="color:var(--subtext); margin:4px 0 8px;">データはこの端末のブラウザ内にだけあります。消えると履歴も戻りません。</div>
+        <div style="display:flex; gap:8px;"><button class="btn" style="flex:2; padding:8px;" onclick="exportBackup(); render();">⬇️ 今すぐExport</button><button class="btn-outline" style="flex:1; padding:8px;" onclick="snoozeBackup()">明日</button></div>
+    </div>`;
 }
 function exportBackup() {
     const blob = new Blob([buildBackup()], { type: 'application/json' });
@@ -1640,9 +1779,10 @@ function exportBackup() {
     a.download = 'link-english-backup-' + logDayKey(Date.now()) + '.json';
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    markBackup();
 }
 function copyBackup() {
-    navigator.clipboard.writeText(buildBackup()).then(() => alert('Copied!')).catch(() => alert('Copy failed'));
+    navigator.clipboard.writeText(buildBackup()).then(() => { markBackup(); alert('Copied!'); }).catch(() => alert('Copy failed'));
 }
 function importBackup(ev) {
     const f = ev.target.files && ev.target.files[0];
@@ -1720,7 +1860,7 @@ function renderSettings(c) {
         </div>
         
         <div style="margin-top:25px;">
-            <label>Backup (lessons + history)</label>
+            <label>Backup (lessons + history) ・ 最終: ${backupAgeDays() === null ? 'なし' : (backupAgeDays() === 0 ? '今日' : backupAgeDays() + '日前')}</label>
             <div style="display:flex; gap:8px; margin-top:4px;">
                 <button class="btn btn-outline" style="flex:1;" onclick="exportBackup()">⬇️ Export</button>
                 <button class="btn btn-outline" style="flex:1;" onclick="copyBackup()">📋 Copy</button>
