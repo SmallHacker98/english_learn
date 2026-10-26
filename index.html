@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Link English v5.6 (Concept-to-Speech)</title>
+    <title>Link English v5.7 (Concept-to-Speech)</title>
     
     <meta name="theme-color" content="#3b82f6">
     <meta name="mobile-web-app-capable" content="yes">
@@ -100,7 +100,7 @@
 <body>
 
 <header>
-    <div class="app-title">Link English v5.6</div>
+    <div class="app-title">Link English v5.7</div>
     <button class="theme-toggle" onclick="toggleTheme()">🌙</button>
 </header>
 
@@ -1647,7 +1647,12 @@ function updatePrompt() {
     state.promptTopic = topic; state.promptLevel = level; state.promptQty = qty; state.promptCategory = category;
     localStorage.setItem('le_prompt_state', JSON.stringify({topic, level, qty, category}));
 
-    // 💡 v5.0向け：新プロンプト (situation_en と keywords を追加)
+    const LV = {
+        Beginner:     { main: '1文・15語以内', drill: '1文・10語以内', gram: '現在形・過去形・can/will・please程度の基本文型。句動詞や複文は避ける' },
+        Intermediate: { main: '1〜2文・25語以内', drill: '1文・15語以内', gram: '現在完了・受動態・if節・依頼表現など日常業務で必要な文型' },
+        Advanced:     { main: '1〜2文・30語以内', drill: '1文・20語以内', gram: '仮定法・婉曲表現・譲歩・交渉や調整の言い回しなど、含みのある表現' }
+    }[level] || { main: '1〜2文・25語以内', drill: '1文・15語以内', gram: '日常業務で必要な文型' };
+    // 💡 v5.7：専門用語の正確性・立場・レベル定義・ドリル役割分担を追加
     const p = `あなたは英語教材作成のプロです。以下の仕様で学習データを作成してください。
 ## 生成モード
 テーマ: ${topic}
@@ -1662,10 +1667,15 @@ function updatePrompt() {
 3. "drills" 配列の中身は必ず5個作成すること。
 4. "situation_en"は、その英語を発するべき状況を「英語」で説明すること（例: You are declining an invitation.）。答えの英文そのものは書かない。
 5. "keywords"は、発話のヒントになる英単語を「配列」で2〜3個入れること。
-6. 英文はすべて話し言葉の長さにする。メイン例文は1〜2文・25語以内、ドリルは1文・15語以内。短縮形(I'm, we'll, can't)を自然に使う。
+6. 英文はすべて話し言葉の長さにする。レベル(${level})の基準: メイン例文は${LV.main}、ドリルは${LV.drill}。文型の目安: ${LV.gram}。短縮形(I'm, we'll, can't)を自然に使う。
 7. 英文の中にダブルクォーテーション、& 、スラッシュ記号、特殊記号は使わない。数字はアラビア数字でも英単語でもよい。
-8. 毎回同じ書き出し(Sure, / Well, など)を連発せず、実際の仕事で使う自然な表現にする。ドリルはメイン例文の言い回しを別の場面で使うものにする。
+8. 毎回同じ書き出し(Sure, / Well, など)を連発せず、実際の仕事で使う自然な表現にする。
 9. "id" は他と重複しない文字列にする。"summary" は日本語か英語の短いタイトル(40文字以内)。
+10. 【話者の立場】セットごとに、話者を次のいずれかにして変える("situation_en"にも立場が分かるように書く): 営業 / 開発者 / フィールドエンジニア / 企画部門の社員。ドリル5つは同じ立場のまま、相手や場面を変えてよい。
+11. 【専門用語の正確性】通信・IT業界で実際に使われる標準的な用語と言い回しだけを使う。造語や直訳調の不自然な言い方は禁止。実在しない製品名・型番・規格名・仕様値・具体的な数値を作らない。数値が必要なときは一般的な範囲の表現(a few days, about ten percent など)にする。
+12. 【ドリルの役割分担】5つのドリルは、すべてメイン例文の核となる表現(chunksの中心となるまとまり)を含め、次の順で役割を変える: (1)別の場面での肯定文 (2)否定文または断り (3)質問 (4)過去の出来事の報告 (5)丁寧さ・強さを変えた言い方(より柔らかく、または、より直接的に)。
+13. 【ドリルの日本語】"japanese"は英語の直訳調にせず、その立場の人が実際に言う自然な口語の日本語にする。"situation_en"と合わせて、言うべき英語がほぼ一つに決まるようにする。
+14. 【音声認識対策】型番、ハイフンでつなぐ語、アルファベット略語の連続は避ける。略語は1文に1つまで。
 
 \`\`\`json
 [
@@ -1749,7 +1759,7 @@ function loadJsonData(replaceAll) {
 // --- BACKUP (v5.1) ---
 function buildBackup() {
     return JSON.stringify({
-        app: 'link-english', version: '5.6', exportedAt: new Date().toISOString(),
+        app: 'link-english', version: '5.7', exportedAt: new Date().toISOString(),
         data: state.data, log: state.log, dialogs: state.dialogs,
         prefs: { theme: state.theme, voiceRate: state.voiceRate, prompt: { topic: state.promptTopic, level: state.promptLevel, qty: state.promptQty } }
     });

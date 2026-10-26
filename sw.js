@@ -1,5 +1,5 @@
 // sw.js (Link English v5.1)
-const CACHE_NAME = 'link-english-v5.6'; // index.html を更新したら、ここも必ず書き換える
+const CACHE_NAME = 'link-english-v5.7'; // index.html を更新したら、ここも必ず書き換える
 const ASSETS = [
     './',
     './index.html'
